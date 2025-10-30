@@ -26,84 +26,37 @@ from ..helper.telegram_helper.message_utils import (
     send_file,
     send_message,
 )
+START_MSG = """<b>
+⚡ ʜᴇʏ ʙᴜᴅᴅʏ ~
+
+<blockquote>I ᴀᴍ ᴀɴ ᴀᴅᴠᴀɴᴄᴇᴅ ᴛᴇʟᴇɢʀᴀᴍ ʙᴏᴛ ᴛᴏ ᴍᴇɢᴀ ʟɪɴᴋs ʀᴇɴᴀᴍᴇʀ ᴡɪᴛʜ ᴇᴀsᴇ. ⚡
+ᴍᴏᴅɪғɪᴇᴅ ʙʏ <a href="https://t.me/ProError">@ᴘʀᴏᴇʀʀᴏʀ</a></blockquote>
+</b>
+"""
+START_BUTTON1 = "• ᴍᴀɪɴ ᴄʜᴀɴɴᴇʟ"
+START_BUTTON2 = "• ᴏᴡɴᴇʀ •"
 
 
 @new_task
 async def start(_, message):
     userid = message.from_user.id
-    lang = Language()
     buttons = ButtonMaker()
-    buttons.url_button(lang.START_BUTTON1, "https://t.me/bhookibhabhi")
+    buttons.url_button(START_BUTTON1, "https://t.me/bhookibhabhi")
     buttons.data_button("ᴀʙᴏᴜᴛ •", "about")
-    buttons.url_button(lang.START_BUTTON2, "https://t.me/dumpadmin")
+    buttons.url_button(START_BUTTON2, "https://t.me/dumpadmin")
     reply_markup = buttons.build_menu(2)
 
-    if len(message.command) > 1:
-        if message.command[1] == "wzmlx":
-            await delete_message(message)
-        elif message.command[1] != "start":
-            decrypted_url = decode_slink(message.command[1])
-            if Config.MEDIA_STORE and decrypted_url.startswith("file"):
-                decrypted_url = decrypted_url.replace("file", "")
-                chat_id, msg_id = decrypted_url.split("&&")
-                LOGGER.info(f"Copying message from {chat_id} & {msg_id} to {userid}")
-                return await TgClient.bot.copy_message(
-                    chat_id=userid,
-                    from_chat_id=int(chat_id) if match(r"\d+", chat_id) else chat_id,
-                    message_id=int(msg_id),
-                    disable_notification=True,
-                )
-            elif Config.VERIFY_TIMEOUT:
-                input_token, pre_uid = decrypted_url.split("&&")
-                if int(pre_uid) != userid:
-                    return await send_message(
-                        message,
-                        "<b>ᴀᴄᴄᴇss ᴛᴏᴋᴇɴ ɴᴏᴛ ʏᴏᴜʀ ɢᴇɴᴇʀᴀᴛᴇ ʏᴏᴜʀ ᴏᴡɴ!</b>",
-                    )
-                data = user_data.get(userid, {})
-                if "VERIFY_TOKEN" not in data or data["VERIFY_TOKEN"] != input_token:
-                    return await send_message(
-                        message,
-                        "<b>ᴛᴏᴋᴇɴ ᴀʟʀᴇᴀᴅʏ ᴜsᴇᴅ ᴏʀ ᴇxᴘɪʀᴇᴅ!</b>\n\n<i>ɢᴇɴᴇʀᴀᴛᴇ ᴀ ɴᴇᴡ ᴏɴᴇ ᴀɴᴅ ᴛʀʏ ᴀɢᴀɪɴ.</i>",
-                    )
-                elif Config.LOGIN_PASS and data["VERIFY_TOKEN"].casefold() == Config.LOGIN_PASS.casefold():
-                    return await send_message(
-                        message,
-                        "<b>ᴀʟʀᴇᴀᴅʏ ʟᴏɢɢᴇᴅ ɪɴ ᴡɪᴛʜ ᴘᴇʀᴍᴀɴᴇɴᴛ ᴀᴄᴄᴇss!</b>",
-                    )
-                buttons.data_button("Activate Access Token", f"start pass {input_token}", "header")
-                reply_markup = buttons.build_menu(2)
-                msg = f"""🥂 ᴀᴄᴄᴇss ʟᴏɢɪɴ ᴛᴏᴋᴇɴ 
-│
-┟ <b>sᴛᴀᴛᴜs → ɢᴇɴᴇʀᴀᴛᴇᴅ sᴜᴄᴇssғᴜʟʟʏ</b>
-┟ <b>ᴀᴄᴄᴇs ᴛᴏᴋᴇɴ</b> → <code>{input_token}</code>
-┃
-┖ <b>ᴠᴀʟɪᴅɪᴛʏ:</b> {get_readable_time(int(Config.VERIFY_TIMEOUT))}"""
-                return await send_message(message, msg, reply_markup)
+    await _.send_photo(
+        chat_id=message.chat.id,
+        photo="https://i.ibb.co/G4RHktPc/image.jpg",
+        caption=START_MSG,
+        reply_markup=reply_markup,
+        message_effect_id=5104841245755180586
 
-    if await CustomFilters.authorized(_, message):
-        start_string = lang.START_MSG.format(
-            cmd=BotCommands.HelpCommand[0],
-        )
-        await _.send_photo(
-            chat_id=message.chat.id,
-            photo="https://i.ibb.co/G4RHktPc/image.jpg",
-            caption=start_string,
-            reply_markup=reply_markup,
-        )
-    elif Config.BOT_PM:
-        await send_message(
-            message,
-            "<b>ᴄᴏᴏʟ ɴᴏᴡ ʙᴏᴛ ᴡɪʟʟ sᴇɴᴅ ᴀʟʟ ғɪʟᴇs ʜᴇʀᴇ</b>",
-            reply_markup=reply_markup,
-        )
-    else:
-        await send_message(
-            message,
-            "<b>⚠️ ʏᴏᴜ ᴀʀᴇ ᴜɴᴀᴜᴛʜᴏʀɪᴢᴇᴅ</b>\n\n<b>ᴄᴏɴᴛᴀᴄᴛ ᴛʜᴇ ʙᴏᴛ ᴏᴡɴᴇʀ ғᴏʀ ᴀᴄᴄᴇss</b>",
-            reply_markup=reply_markup,
-        )
+    )
+    await delete_message(message)
     await database.set_pm_users(userid)
+
 
 
 ABOUT_MSG = """<b>🤖 ᴍʏ ɴᴀᴍᴇ: {botname}
