@@ -106,8 +106,43 @@ async def add_mega_download(listener, path):
 
 
 
+from mega import MegaApi, MegaListener
 import asyncio
-from mega import MegaApi
+
+class SimpleListener(MegaListener):
+    def __init__(self):
+        self.future = asyncio.get_event_loop().create_future()
+
+    def onRequestFinish(self, api, request, error):
+        if request.getType() == request.TYPE_LOGIN:
+            if error and error.getErrorCode() != 0:
+                self.future.set_exception(Exception(error.toString()))
+            else:
+                self.future.set_result(True)
+
+async def login_to_mega(email, password):
+    api = MegaApi("WZML-X")
+    listener = SimpleListener()
+    api.login(email, password, listener)
+    await listener.future
+    return api
+
+async def rename_all(api: MegaApi, pattern: str):
+    loop = asyncio.get_event_loop()
+    root = api.getRootNode()
+    nodes = api.getChildren(root)
+    renamed = 0
+
+    for i in range(nodes.size()):
+        node = nodes.get(i)
+        old_name = node.getName()
+        new_name = f"{pattern}_{i+1}"
+        try:
+            await loop.run_in_executor(None, api.renameNode, node, new_name)
+            renamed += 1
+        except Exception as e:
+            print(f"❌ Failed to rename {old_name}: {e}")
+    return renamed
 
 async def rename_mega_command(client, message):
     try:
@@ -124,30 +159,11 @@ async def rename_mega_command(client, message):
 
         msg = await send_message(message, "🔐 Logging into Mega account...")
 
-        # Run the blocking Mega API in a thread so it doesn’t freeze
-        def login_and_rename():
-            from mega import Mega
-            m = Mega()
-            m.login(email, password)
+        api = await login_to_mega(email, password)
+        await msg.edit_text("✅ Logged in. Renaming files and folders...")
 
-            files = m.get_files()
-            renamed = 0
-            for file_id, file_info in files.items():
-                if file_info['a']['n']:  # has name
-                    old_name = file_info['a']['n']
-                    new_name = f"{rename_pattern}_{renamed+1}"
-                    try:
-                        m.rename(file_id, new_name)
-                        renamed += 1
-                    except Exception as e:
-                        print(f"Failed to rename {old_name}: {e}")
-            return renamed
-
-        renamed_count = await asyncio.to_thread(login_and_rename)
-
-        await msg.edit_text(
-            f"✅ Successfully renamed `{renamed_count}` items in account:\n**{email}**"
-        )
+        renamed = await rename_all(api, rename_pattern)
+        await msg.edit_text(f"✅ Renamed `{renamed}` items in account `{email}`.")
 
     except Exception as e:
         await send_message(message, f"❌ Error: {e}")
