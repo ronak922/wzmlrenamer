@@ -38,13 +38,13 @@ def add_handlers():
             if cmds is not None
         ]
     )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         authorize,
-    #         filters=command(BotCommands.AuthorizeCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            authorize,
+            filters=command(BotCommands.AuthorizeCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         unauthorize,
