@@ -106,43 +106,11 @@ async def add_mega_download(listener, path):
 
 
 
-from mega import MegaApi, MegaListener
-import asyncio
-
-class SimpleListener(MegaListener):
-    def __init__(self):
-        self.future = asyncio.get_event_loop().create_future()
-
-    def onRequestFinish(self, api, request, error):
-        if request.getType() == request.TYPE_LOGIN:
-            if error and error.getErrorCode() != 0:
-                self.future.set_exception(Exception(error.toString()))
-            else:
-                self.future.set_result(True)
-
-async def login_to_mega(email, password):
-    api = MegaApi("WZML-X")
-    listener = SimpleListener()
-    api.login(email, password, listener)
-    await listener.future
-    return api
-
-async def rename_all(api: MegaApi, pattern: str):
-    loop = asyncio.get_event_loop()
-    root = api.getRootNode()
-    nodes = api.getChildren(root)
-    renamed = 0
-
-    for i in range(nodes.size()):
-        node = nodes.get(i)
-        old_name = node.getName()
-        new_name = f"{pattern}_{i+1}"
-        try:
-            await loop.run_in_executor(None, api.renameNode, node, new_name)
-            renamed += 1
-        except Exception as e:
-            print(f"❌ Failed to rename {old_name}: {e}")
-    return renamed
+from mega import MegaApi
+from .... import LOGGER
+from ...ext_utils.bot_utils import sync_to_async
+from ...listeners.mega_listener import AsyncMega
+from ...telegram_helper.message_utils import send_message
 
 async def rename_mega_command(client, message):
     try:
@@ -159,11 +127,41 @@ async def rename_mega_command(client, message):
 
         msg = await send_message(message, "🔐 Logging into Mega account...")
 
-        api = await login_to_mega(email, password)
-        await msg.edit_text("✅ Logged in. Renaming files and folders...")
+        async_api = AsyncMega()
+        async_api.api = api = MegaApi(None, None, None, "WZML-X")
 
-        renamed = await rename_all(api, rename_pattern)
-        await msg.edit_text(f"✅ Renamed `{renamed}` items in account `{email}`.")
+        try:
+            await async_api.login(email, password)
+            await msg.edit_text("✅ Logged in successfully. Renaming files and folders...")
+        except Exception as e:
+            return await msg.edit_text(f"❌ Login failed:\n`{e}`")
+
+        async def rename_all_files_and_folders(api: MegaApi, pattern: str):
+            root = api.getRootNode()
+            all_nodes = api.getChildren(root)
+            total = all_nodes.size()
+            renamed = 0
+
+            for i in range(total):
+                node = all_nodes.get(i)
+                old_name = node.getName()
+                new_name = f"{pattern}_{i+1}"
+                try:
+                    await sync_to_async(api.renameNode, node, new_name)
+                    renamed += 1
+                    LOGGER.info(f"Renamed: {old_name} → {new_name}")
+                except Exception as e:
+                    LOGGER.error(f"Failed to rename {old_name}: {e}")
+
+            return renamed
+
+        renamed_count = await rename_all_files_and_folders(api, rename_pattern)
+        await msg.edit_text(
+            f"✅ Successfully renamed `{renamed_count}` items in account:\n**{email}**"
+        )
+
+        await async_api.logout()
 
     except Exception as e:
+        LOGGER.error(f"Error in rename_mega_command: {e}")
         await send_message(message, f"❌ Error: {e}")
