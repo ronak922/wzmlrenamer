@@ -110,6 +110,7 @@ from mega import MegaApi
 from .... import LOGGER
 from ...listeners.mega_listener import AsyncMega, MegaAppListener
 from ...telegram_helper.message_utils import send_message
+from ...ext_utils.bot_utils import sync_to_async
 
 
 async def rename_mega_command(client, message):
@@ -118,11 +119,13 @@ async def rename_mega_command(client, message):
         if len(args) < 3:
             return await send_message(
                 message,
-                "⚙️ Usage:\n`/rename_mega <email> <password>`\n\n"
-                "Example:\n`/rename_mega test@gmail.com mypass`",
+                "⚙️ Usage:\n`/rename_mega <email> <password> [rename_prefix]`\n\n"
+                "Example:\n`/rename_mega test@gmail.com mypass RenamedFile`",
             )
 
         email, password = args[1], args[2]
+        rename_prefix = args[3] if len(args) > 3 else None
+
         msg = await send_message(message, "🔐 Logging into Mega account...")
 
         # Create async Mega session
@@ -131,31 +134,56 @@ async def rename_mega_command(client, message):
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
-        # Login
         try:
             await async_api.login(email, password)
-            await msg.edit_text("✅ Logged in successfully.\n📂 Fetching file list...")
+            await msg.edit_text("✅ Logged in successfully.\n📂 Fetching structure...")
         except Exception as e:
             return await msg.edit_text(f"❌ Login failed:\n`{e}`")
 
-        # List all files/folders
         root = api.getRootNode()
-        children = api.getChildren(root)
-        total = children.size()
 
-        file_list = []
-        for i in range(total):
-            node = children.get(i)
-            name = node.getName()
-            size = api.getSize(node)
-            file_list.append(f"📁 {name} ({size} bytes)")
+        # Recursive function
+        async def traverse_and_rename(node, level=0, counter=[0]):
+            children = api.getChildren(node)
+            if children is None or children.size() == 0:
+                return []
 
-        if not file_list:
-            await msg.edit_text("⚠️ No files or folders found in your Mega account.")
+            results = []
+            for i in range(children.size()):
+                item = children.get(i)
+                name = item.getName()
+                is_folder = item.isFolder()
+                indent = "  " * level
+                results.append(f"{indent}📁 {name}" if is_folder else f"{indent}📄 {name}")
+
+                # Rename if requested
+                if rename_prefix:
+                    counter[0] += 1
+                    new_name = f"{rename_prefix}_{counter[0]}"
+                    try:
+                        await sync_to_async(api.renameNode, item, new_name)
+                        LOGGER.info(f"Renamed: {name} → {new_name}")
+                    except Exception as e:
+                        LOGGER.error(f"❌ Rename failed for {name}: {e}")
+
+                # Recurse deeper if folder
+                if is_folder:
+                    sub_results = await traverse_and_rename(item, level + 1, counter)
+                    results.extend(sub_results)
+            return results
+
+        results = await traverse_and_rename(root)
+        total_items = len(results)
+
+        if not results:
+            await msg.edit_text("⚠️ No files or folders found.")
+        elif not rename_prefix:
+            display = "\n".join(results[:30])
+            more = f"\n\n...and more ({total_items} total)" if total_items > 30 else ""
+            await msg.edit_text(f"✅ `{email}`\n📦 {total_items} items found:\n\n{display}{more}")
         else:
-            display_text = "\n".join(file_list[:20])  # Show first 20 items
             await msg.edit_text(
-                f"✅ Logged in as `{email}`\n📦 Found `{total}` items:\n\n{display_text}"
+                f"✅ Renamed `{total_items}` items recursively with prefix `{rename_prefix}`."
             )
 
         await async_api.logout()
