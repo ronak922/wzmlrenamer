@@ -26,6 +26,18 @@ def add_handlers():
             filters=command("prefix", case_sensitive=True)
         )
     )
+
+    TgClient.bot.set_bot_commands(
+        [
+            BotCommand(
+                cmds[0] if isinstance(cmds, list) else cmds,
+                description,
+            )
+            for cmd, description in BOT_COMMANDS.items()
+            for cmds in [getattr(BotCommands, f"{cmd}Command", None)]
+            if cmds is not None
+        ]
+    )
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         authorize,
@@ -416,14 +428,4 @@ def add_handlers():
     #             BOT_COMMANDS, "Login", "[password] Login to Bot", 14
     #         )
 
-    #     TgClient.bot.set_bot_commands(
-    #         [
-    #             BotCommand(
-    #                 cmds[0] if isinstance(cmds, list) else cmds,
-    #                 description,
-    #             )
-    #             for cmd, description in BOT_COMMANDS.items()
-    #             for cmds in [getattr(BotCommands, f"{cmd}Command", None)]
-    #             if cmds is not None
-    #         ]
-    #     )
+
