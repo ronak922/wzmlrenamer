@@ -116,6 +116,10 @@ from ...ext_utils.bot_utils import sync_to_async
 
 
 async def rename_mega_command(client, message):
+    api = None
+    async_api = None
+    mega_listener = None
+
     try:
         args = message.text.split(maxsplit=3)
         if len(args) < 3:
@@ -133,9 +137,10 @@ async def rename_mega_command(client, message):
 
         msg = await send_message(message, "🔐 <b>Logging into Mega account...</b>", )
 
-        # Create async Mega session
+        # Independent session
         async_api = AsyncMega()
-        async_api.api = api = MegaApi(None, None, None, "WZML-X")
+        api = MegaApi(None, None, None, "WZML-X")
+        async_api.api = api
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
@@ -149,10 +154,9 @@ async def rename_mega_command(client, message):
 
         root = api.getRootNode()
 
-        # Recursive traversal + rename
         async def traverse_and_rename(node, level=0, counter=[0]):
             children = api.getChildren(node)
-            if children is None or children.size() == 0:
+            if not children or children.size() == 0:
                 return []
 
             results = []
@@ -160,26 +164,19 @@ async def rename_mega_command(client, message):
                 item = children.get(i)
                 name = item.getName()
                 is_folder = item.isFolder()
-                indent = " " * level  # thin spaces for nested display
+                indent = " " * level
                 results.append(f"{indent}📁 <b>{name}</b>" if is_folder else f"{indent}📄 {name}")
 
-                # Rename if prefix provided
                 if rename_prefix:
                     counter[0] += 1
-
-                    if is_folder:
-                        new_name = f"{rename_prefix}_{counter[0]}"
-                    else:
-                        base, ext = os.path.splitext(name)
-                        new_name = f"{rename_prefix}_{counter[0]}{ext}"
-
+                    base, ext = os.path.splitext(name)
+                    new_name = f"{rename_prefix}_{counter[0]}{ext}" if not is_folder else f"{rename_prefix}_{counter[0]}"
                     try:
                         await sync_to_async(api.renameNode, item, new_name)
                         LOGGER.info(f"Renamed: {name} → {new_name}")
                     except Exception as e:
-                        LOGGER.error(f"❌ Rename failed for {name}: {e}")
+                        LOGGER.error(f"Rename failed for {name}: {e}")
 
-                # Recurse deeper if folder
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
                     results.extend(sub_results)
@@ -191,7 +188,6 @@ async def rename_mega_command(client, message):
         elapsed_time = time.time() - start_time
         time_taken = f"{elapsed_time:.2f} seconds"
 
-        # Format the final result
         if not results:
             await msg.edit_text("⚠️ <b>No files or folders found in this Mega account.</b>")
         elif not rename_prefix:
@@ -203,14 +199,24 @@ async def rename_mega_command(client, message):
             )
         else:
             await msg.edit_text(
-                f"✅ <b>Renamed {total_items} items recursively</b>\n"
+                f"✅ <b>Renamed {total_items} items</b>\n"
                 f"🆔 <code>{email}</code>\n"
                 f"🔤 Prefix: <code>{rename_prefix}</code>\n"
                 f"⏱️ <i>Completed in {time_taken}</i>",
             )
 
-        await async_api.logout()
-
     except Exception as e:
         LOGGER.error(f"Error in rename_mega_command: {e}")
         await send_message(message, f"❌ <b>Error:</b> <code>{e}</code>")
+
+    finally:
+        try:
+            if async_api:
+                await async_api.logout()
+            if api and mega_listener:
+                api.removeListener(mega_listener)
+            del api
+            del mega_listener
+            del async_api
+        except Exception as cleanup_err:
+            LOGGER.warning(f"Cleanup error: {cleanup_err}")
