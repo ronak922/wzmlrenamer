@@ -10,16 +10,17 @@ from ..helper.telegram_helper.bot_commands import BotCommands
 from ..helper.telegram_helper.filters import CustomFilters
 from ..modules import *
 from .tg_client import TgClient
-from ..helper.mirror_leech_utils.download_utils.mega_download import *
+from ..helper.mirror_leech_utils.download_utils.mega_renamer import *
 
 
 def add_handlers():
     TgClient.bot.add_handler(
         MessageHandler(
-            rename_mega_command,
-            filters=command("rename", case_sensitive=True)
+            start,
+            filters=command("start", case_sensitive=True)
         )
     )
+
     TgClient.bot.add_handler(
         MessageHandler(
             prefix_command,
@@ -27,23 +28,27 @@ def add_handlers():
         )
     )
 
-    TgClient.bot.set_bot_commands(
-        [
-            BotCommand(
-                cmds[0] if isinstance(cmds, list) else cmds,
-                description,
-            )
-            for cmd, description in BOT_COMMANDS.items()
-            for cmds in [getattr(BotCommands, f"{cmd}Command", None)]
-            if cmds is not None
-        ]
+    TgClient.bot.add_handler(
+        MessageHandler(
+            rename_mega_command,
+            filters=command("rename", case_sensitive=True)
+        )
     )
+
     TgClient.bot.add_handler(
         MessageHandler(
             authorize,
             filters=command(BotCommands.AuthorizeCommand, case_sensitive=True)
             & CustomFilters.sudo,
         )
+    )
+
+    # Set visible commands in Telegram’s menu
+    TgClient.bot.set_bot_commands(
+        [
+            BotCommand(cmd, desc)
+            for cmd, desc in BOT_COMMANDS.items()
+        ]
     )
     # TgClient.bot.add_handler(
     #     MessageHandler(
@@ -253,11 +258,7 @@ def add_handlers():
     #         & CustomFilters.owner,
     #     )
     # )
-    TgClient.bot.add_handler(
-        MessageHandler(
-            start, filters=command(BotCommands.StartCommand, case_sensitive=True)
-        )
-    )
+
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         login, filters=command(BotCommands.LoginCommand, case_sensitive=True)

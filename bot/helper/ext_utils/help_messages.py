@@ -383,34 +383,9 @@ def get_bot_commands():
     from ...core.plugin_manager import get_plugin_manager
 
     static_commands = {
-        "Start": "⚡ ʟᴇᴛ ᴛʜᴇ ʜᴜɴᴛ ʙᴇɢɪɴ",
-        "prefix": "⚡ sᴇᴛ ʏᴏᴜʀ ᴘʀᴇғɪx ",
-        "rename": "ʀᴇɴᴀᴍᴇ ғɪʟᴇs",
-        # "Mirror": "[link/file] ᴍɪʀʀᴏʀ ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴅᴇsᴛɪɴᴀᴛɪᴏɴ",
-        # "QbMirror": "[magnet/torrent] ᴍɪʀʀᴏʀ ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴅᴇsᴛɪɴᴀᴛɪᴏɴ ᴜsɪɴɢ Qʙɪᴛ",
-        # "Ytdl": "[link] ᴍɪʀʀᴏʀ ʏᴏᴜᴛᴜʙᴇ, ᴍ3ᴜ8, sᴏᴄɪᴀʟ ᴍᴇᴅɪᴀ ᴀɴᴅ ʏᴛ-ᴅʟᴘ sᴜᴘᴘᴏʀᴛᴇᴅ ᴜʀʟs",
-        # "Leech": "[link/file] ʟᴇᴇᴄʜ ғɪʟᴇs ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴍ",
-        # "QbLeech": "[magnet/torrent] ʟᴇᴇᴄʜ ғɪʟᴇs ᴛᴏ ᴜᴘʟᴏᴀᴅ ᴛᴏ ᴛᴇʟᴇɢʀᴀᴍ ᴜsɪɴɢ Qʙɪᴛ",
-        # "YtdlLeech": "[link] ʟᴇᴇᴄʜ ʏᴏᴜᴛᴜʙᴇ, ᴍ3ᴜ8, sᴏᴄɪᴀʟ ᴍᴇᴅɪᴀ ᴀɴᴅ ʏᴛ-ᴅʟᴘ sᴜᴘᴘᴏʀᴛᴇᴅ ᴜʀʟs",
-        # "Clone": "[link] ᴄʟᴏɴᴇ ғɪʟᴇs/ғᴏʟᴅᴇʀs ᴛᴏ ɢᴅʀɪᴠᴇ",
-        # "UserSet": "ᴜsᴇʀ ᴘᴇʀsᴏɴᴀʟ sᴇᴛᴛɪɴɢs",
-        # "ForceStart": "[gid/reply] ғᴏʀᴄᴇ sᴛᴀʀᴛ ғʀᴏᴍ Qᴜᴇᴜᴇᴅ ᴛᴀsᴋ",
-        # "Count": "[link] ᴄᴏᴜɴᴛ ɴᴏ. ᴏғ ғɪʟᴇs/ғᴏʟᴅᴇʀs ɪɴ ɢᴅʀɪᴠᴇ",
-        # "List": "[query] sᴇᴀʀᴄʜ ᴀɴʏ ᴛᴇxᴛ ᴀᴠᴀɪʟᴀʙʟᴇ ɪɴ ɢᴅʀɪᴠᴇ",
-        # "Search": "[query] sᴇᴀʀᴄʜ ᴛᴏʀʀᴇɴᴛs ᴠɪᴀ Qʙɪᴛ ᴘʟᴜɢɪɴs",
-        # "MediaInfo": "[reply/link] ɢᴇᴛ ᴍᴇᴅɪᴀɪɴғᴏ ᴏғ ᴛᴀʀɢᴇᴛ ᴍᴇᴅɪᴀ",
-        # "Select": "[gid/reply] sᴇʟᴇᴄᴛ ғɪʟᴇs ғᴏʀ ɴᴢʙ, ᴀʀɪᴀ2, Qʙɪᴛ ᴛᴀsᴋs",
-        # "Ping": "ᴘɪɴɢ ʙᴏᴛ ᴛᴏ ᴛᴇsᴛ ʀᴇsᴘᴏɴsᴇ sᴘᴇᴇᴅ",
-        # "Status": "[id/me] ᴛᴀsᴋs sᴛᴀᴛᴜs ᴏғ ʙᴏᴛ",
-        # "Stats": "ʙᴏᴛ, ᴏs, ʀᴇᴘᴏ & sʏsᴛᴇᴍ ғᴜʟʟ sᴛᴀᴛɪsᴛɪᴄs",
-        # "Rss": "ᴜsᴇʀ ʀss ᴍᴀɴᴀɢᴇᴍᴇɴᴛ sᴇᴛᴛɪɴɢs",
-        # "IMDB": "[query/ttxxxxxxx] ɢᴇᴛ ɪᴍᴅʙ ɪɴғᴏ",
-        # "CancelAll": "ᴄᴀɴᴄᴇʟ ᴀʟʟ ᴛᴀsᴋs ᴏɴ ʙᴏᴛ",
-        # "Help": "ᴅᴇᴛᴀɪʟᴇᴅ ʜᴇʟᴘ ᴜsᴀɢᴇ ᴏғ ᴡᴢ ʙᴏᴛ",
-        # "BotSet": "[SUDO] ʙᴏᴛ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ sᴇᴛᴛɪɴɢs",
-        # "Log": "[SUDO] ɢᴇᴛ ʙᴏᴛ ʟᴏɢs ғᴏʀ ɪɴᴛᴇʀɴᴀʟ ᴡᴏʀᴋɪɴɢ",
-        # "Restart": "[SUDO] ʀᴇʙᴏᴏᴛ ʙᴏᴛ",
-        # "RestartSessions": "[SUDO] ʀᴇʙᴏᴏᴛ ᴜsᴇʀ sᴇssɪᴏɴs",
+        "start": "⚡ ʟᴇᴛ ᴛʜᴇ ʜᴜɴᴛ ʙᴇɢɪɴ",
+        "prefix": "⚡ sᴇᴛ ʏᴏᴜʀ ᴘʀᴇғɪx ғᴏʀ ʀᴇɴᴀᴍᴇ",
+        "rename": "⚙️ ʀᴇɴᴀᴍᴇ ᴀʟʟ ᴍᴇɢᴀ ғɪʟᴇs",
     }
 
     commands = static_commands.copy()
@@ -421,10 +396,9 @@ def get_bot_commands():
             if plugin_info.enabled and plugin_info.commands:
                 for cmd in plugin_info.commands:
                     if cmd == "speedtest":
-                        commands["SpeedTest"] = "ᴄʜᴇᴄᴋ ʙᴏᴛ sᴘᴇᴇᴅ ᴜsɪɴɢ sᴘᴇᴇᴅᴛᴇsᴛ.ᴄᴏᴍ"
+                        commands["speedtest"] = "⚡ ᴄʜᴇᴄᴋ ʙᴏᴛ sᴘᴇᴇᴅ ᴜsɪɴɢ sᴘᴇᴇᴅᴛᴇsᴛ.ᴄᴏᴍ"
 
     return commands
-
 
 
 BOT_COMMANDS = get_bot_commands()

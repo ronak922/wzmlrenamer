@@ -6,40 +6,40 @@ from ..helper.telegram_helper.message_utils import send_message
 
 @new_task
 async def authorize(_, message):
-    """
-    Simplified authorize — no manual authorization required.
-    Every user is automatically authorized.
-    """
-    msg_parts = message.text.split()
+    msg = message.text.split()
     thread_id = None
-
-    # Determine chat_id and thread_id
-    if len(msg_parts) > 1:
-        if "|" in msg_parts[1]:
-            chat_id, thread_id = list(map(int, msg_parts[1].split("|")))
+    if len(msg) > 1:
+        if "|" in msg:
+            chat_id, thread_id = list(map(int, msg[1].split("|")))
         else:
-            chat_id = int(msg_parts[1].strip())
+            chat_id = int(msg[1].strip())
     elif reply_to := message.reply_to_message:
         chat_id = (reply_to.from_user or reply_to.sender_chat).id
     else:
-        chat_id = message.chat.id
         if getattr(message, "is_topic_message", False):
             thread_id = getattr(message, "message_thread_id", None)
+        chat_id = message.chat.id
+    if chat_id in user_data and user_data[chat_id].get("AUTH"):
+        if (
+            thread_id is not None
+            and thread_id in user_data[chat_id].get("thread_ids", [])
+            or thread_id is None
+        ):
+            msg = "Already Authorized!"
+        else:
+            if "thread_ids" in user_data[chat_id]:
+                user_data[chat_id]["thread_ids"].append(thread_id)
+            else:
+                user_data[chat_id]["thread_ids"] = [thread_id]
+            msg = "Authorized"
+    else:
+        update_user_ldata(chat_id, "AUTH", True)
+        if thread_id is not None:
+            update_user_ldata(chat_id, "thread_ids", [thread_id])
+        await database.update_user_data(chat_id)
+        msg = "Authorized"
+    await send_message(message, msg)
 
-    # Always mark user as authorized
-    update_user_ldata(chat_id, "AUTH", True)
-
-    # Store thread ID if needed
-    if thread_id is not None:
-        existing_threads = user_data.get(chat_id, {}).get("thread_ids", [])
-        if thread_id not in existing_threads:
-            existing_threads.append(thread_id)
-            update_user_ldata(chat_id, "thread_ids", existing_threads)
-
-    # Save to database
-    await database.update_user_data(chat_id)
-
-    await send_message(message, "✅ ᴀᴜᴛʜᴏʀɪᴢᴇᴅ ᴀᴜᴛᴏᴍᴀᴛɪᴄᴀʟʟʏ (ɴᴏ ᴄᴏᴍᴍᴀɴᴅ ɴᴇᴇᴅᴇᴅ)")
 
 @new_task
 async def unauthorize(_, message):
