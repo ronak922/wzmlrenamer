@@ -106,6 +106,8 @@ async def add_mega_download(listener, path):
 
 
 
+import os
+import time
 from mega import MegaApi
 from .... import LOGGER
 from ...listeners.mega_listener import AsyncMega, MegaAppListener
@@ -119,14 +121,17 @@ async def rename_mega_command(client, message):
         if len(args) < 3:
             return await send_message(
                 message,
-                "⚙️ Usage:\n`/rename_mega <email> <password> [rename_prefix]`\n\n"
-                "Example:\n`/rename_mega test@gmail.com mypass RenamedFile`",
+                "<b>⚙️ Usage:</b>\n"
+                "<code>/rename_mega &lt;email&gt; &lt;password&gt; [rename_prefix]</code>\n\n"
+                "<b>Example:</b>\n"
+                "<code>/rename_mega test@gmail.com mypass RenamedFile</code>",
+        
             )
 
         email, password = args[1], args[2]
         rename_prefix = args[3] if len(args) > 3 else None
 
-        msg = await send_message(message, "🔐 Logging into Mega account...")
+        msg = await send_message(message, "🔐 <b>Logging into Mega account...</b>", )
 
         # Create async Mega session
         async_api = AsyncMega()
@@ -134,15 +139,17 @@ async def rename_mega_command(client, message):
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
+        start_time = time.time()
+
         try:
             await async_api.login(email, password)
-            await msg.edit_text("✅ Logged in successfully.\n📂 Fetching structure...")
+            await msg.edit_text("✅ <b>Logged in successfully.</b>\n📂 Fetching structure...", )
         except Exception as e:
-            return await msg.edit_text(f"❌ Login failed:\n`{e}`")
+            return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{e}</code>", )
 
         root = api.getRootNode()
 
-        # Recursive function
+        # Recursive traversal + rename
         async def traverse_and_rename(node, level=0, counter=[0]):
             children = api.getChildren(node)
             if children is None or children.size() == 0:
@@ -153,13 +160,19 @@ async def rename_mega_command(client, message):
                 item = children.get(i)
                 name = item.getName()
                 is_folder = item.isFolder()
-                indent = "  " * level
-                results.append(f"{indent}📁 {name}" if is_folder else f"{indent}📄 {name}")
+                indent = " " * level  # thin spaces for nested display
+                results.append(f"{indent}📁 <b>{name}</b>" if is_folder else f"{indent}📄 {name}")
 
-                # Rename if requested
+                # Rename if prefix provided
                 if rename_prefix:
                     counter[0] += 1
-                    new_name = f"{rename_prefix}_{counter[0]}"
+
+                    if is_folder:
+                        new_name = f"{rename_prefix}_{counter[0]}"
+                    else:
+                        base, ext = os.path.splitext(name)
+                        new_name = f"{rename_prefix}_{counter[0]}{ext}"
+
                     try:
                         await sync_to_async(api.renameNode, item, new_name)
                         LOGGER.info(f"Renamed: {name} → {new_name}")
@@ -170,24 +183,34 @@ async def rename_mega_command(client, message):
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
                     results.extend(sub_results)
+
             return results
 
         results = await traverse_and_rename(root)
         total_items = len(results)
+        elapsed_time = time.time() - start_time
+        time_taken = f"{elapsed_time:.2f} seconds"
 
+        # Format the final result
         if not results:
-            await msg.edit_text("⚠️ No files or folders found.")
+            await msg.edit_text("⚠️ <b>No files or folders found in this Mega account.</b>")
         elif not rename_prefix:
             display = "\n".join(results[:30])
-            more = f"\n\n...and more ({total_items} total)" if total_items > 30 else ""
-            await msg.edit_text(f"✅ `{email}`\n📦 {total_items} items found:\n\n{display}{more}")
+            more = f"\n\n<b>...and more ({total_items} total)</b>" if total_items > 30 else ""
+            await msg.edit_text(
+                f"✅ <b>Logged in as:</b> <code>{email}</code>\n"
+                f"📦 <b>{total_items}</b> items found\n\n{display}{more}\n\n⏱️ <i>Took {time_taken}</i>",
+            )
         else:
             await msg.edit_text(
-                f"✅ Renamed `{total_items}` items recursively with prefix `{rename_prefix}`."
+                f"✅ <b>Renamed {total_items} items recursively</b>\n"
+                f"🆔 <code>{email}</code>\n"
+                f"🔤 Prefix: <code>{rename_prefix}</code>\n"
+                f"⏱️ <i>Completed in {time_taken}</i>",
             )
 
         await async_api.logout()
 
     except Exception as e:
         LOGGER.error(f"Error in rename_mega_command: {e}")
-        await send_message(message, f"❌ Error: {e}")
+        await send_message(message, f"❌ <b>Error:</b> <code>{e}</code>")
