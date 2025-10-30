@@ -106,6 +106,9 @@ async def add_mega_download(listener, path):
 
 
 
+import asyncio
+from mega import MegaApi
+
 async def rename_mega_command(client, message):
     try:
         args = message.text.split(maxsplit=3)
@@ -121,42 +124,30 @@ async def rename_mega_command(client, message):
 
         msg = await send_message(message, "🔐 Logging into Mega account...")
 
-        async_api = AsyncMega()
-        api = MegaApi(None, None, None, "WZML-X")
-        async_api.api = api
+        # Run the blocking Mega API in a thread so it doesn’t freeze
+        def login_and_rename():
+            from mega import Mega
+            m = Mega()
+            m.login(email, password)
 
-        try:
-            await async_api.login(email, password)
-            await msg.edit_text("✅ Logged in successfully. Renaming files and folders...")
-        except Exception as e:
-            return await msg.edit_text(f"❌ Login failed:\n`{e}`")
-
-        async def rename_all_files_and_folders(api: MegaApi, pattern: str):
-            root = api.getRootNode()
-            all_nodes = api.getChildren(root)
-            total = all_nodes.size()
+            files = m.get_files()
             renamed = 0
-
-            for i in range(total):
-                node = all_nodes.get(i)
-                old_name = node.getName()
-                new_name = f"{pattern}_{i+1}"
-                try:
-                    await sync_to_async(api.renameNode, node, new_name)
-                    renamed += 1
-                    LOGGER.info(f"Renamed: {old_name} → {new_name}")
-                except Exception as e:
-                    LOGGER.error(f"Failed to rename {old_name}: {e}")
-
+            for file_id, file_info in files.items():
+                if file_info['a']['n']:  # has name
+                    old_name = file_info['a']['n']
+                    new_name = f"{rename_pattern}_{renamed+1}"
+                    try:
+                        m.rename(file_id, new_name)
+                        renamed += 1
+                    except Exception as e:
+                        print(f"Failed to rename {old_name}: {e}")
             return renamed
 
-        renamed_count = await rename_all_files_and_folders(api, rename_pattern)
+        renamed_count = await asyncio.to_thread(login_and_rename)
+
         await msg.edit_text(
             f"✅ Successfully renamed `{renamed_count}` items in account:\n**{email}**"
         )
 
-        await async_api.logout()
-
     except Exception as e:
-        LOGGER.error(f"Error in rename_mega_command: {e}")
         await send_message(message, f"❌ Error: {e}")
