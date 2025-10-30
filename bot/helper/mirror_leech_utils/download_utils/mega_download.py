@@ -106,51 +106,72 @@ async def add_mega_download(listener, path):
 
 
 
-import os
-import time
 from mega import MegaApi
 from .... import LOGGER
 from ...listeners.mega_listener import AsyncMega, MegaAppListener
 from ...telegram_helper.message_utils import send_message
 from ...ext_utils.bot_utils import sync_to_async
+import os, time
+
+# Store user prefixes temporarily in memory
+USER_PREFIXES = {}
+
+
+async def prefix_command(client, message):
+    """Set custom rename prefix for a user."""
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await send_message(
+            message,
+            "⚙️ ᴜsᴀɢᴇ:\n/prefix <ᴘʀᴇꜰɪx>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/prefix @BhookiBhabhi"
+        )
+
+    prefix = args[1].strip()
+    user_id = message.from_user.id
+    USER_PREFIXES[user_id] = prefix
+
+    await send_message(
+        message,
+        f"✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}\n"
+        f"⚡ ɴᴏᴡ ʏᴏᴜ ᴄᴀɴ ᴜsᴇ /rename_mega ᴡɪᴛʜᴏᴜᴛ ᴛʏᴘɪɴɢ ɪᴛ."
+    )
 
 
 async def rename_mega_command(client, message):
-    api = None
-    async_api = None
-    mega_listener = None
-
     try:
         args = message.text.split(maxsplit=3)
         if len(args) < 3:
             return await send_message(
                 message,
-                "<b>⚙️ Usage:</b>\n"
-                "<code>/rename_mega &lt;email&gt; &lt;password&gt; [rename_prefix]</code>\n\n"
-                "<b>Example:</b>\n"
-                "<code>/rename_mega test@gmail.com mypass RenamedFile</code>",
-        
+                "⚙️ ᴜsᴀɢᴇ:\n/rename_mega <email> <password> [prefix]\n\n"
+                "📘 ᴇxᴀᴍᴘʟᴇ:\n/rename_mega test@gmail.com mypass RenamedFile"
             )
 
         email, password = args[1], args[2]
-        rename_prefix = args[3] if len(args) > 3 else None
 
-        msg = await send_message(message, "🔐 <b>Logging into Mega account...</b>", )
+        # Use either command argument or saved user prefix
+        user_id = message.from_user.id
+        rename_prefix = None
+        if len(args) > 3:
+            rename_prefix = args[3]
+        elif user_id in USER_PREFIXES:
+            rename_prefix = USER_PREFIXES[user_id]
 
-        # Independent session
-        async_api = AsyncMega()
-        api = MegaApi(None, None, None, "WZML-X")
-        async_api.api = api
-        mega_listener = MegaAppListener(async_api.continue_event, None)
-        api.addListener(mega_listener)
+        msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ ᴀᴄᴄᴏᴜɴᴛ...</b>")
 
         start_time = time.time()
 
+        # Create isolated Mega session per user
+        async_api = AsyncMega()
+        async_api.api = api = MegaApi(None, None, None, "PRO_ERROR_RENAME")
+        mega_listener = MegaAppListener(async_api.continue_event, None)
+        api.addListener(mega_listener)
+
         try:
             await async_api.login(email, password)
-            await msg.edit_text("✅ <b>Logged in successfully.</b>\n📂 Fetching structure...", )
+            await msg.edit_text("<b>✅ ʟᴏɢɢᴇᴅ ɪɴ sᴜᴄᴄᴇssꜰᴜʟʟʏ.\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
         except Exception as e:
-            return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{e}</code>", )
+            return await msg.edit_text(f"<b>❌ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:\n{e}</b>")
 
         root = api.getRootNode()
 
@@ -164,59 +185,47 @@ async def rename_mega_command(client, message):
                 item = children.get(i)
                 name = item.getName()
                 is_folder = item.isFolder()
-                indent = " " * level
-                results.append(f"{indent}📁 <b>{name}</b>" if is_folder else f"{indent}📄 {name}")
+                indent = "  " * level
+                results.append(f"{indent}📁 {name}" if is_folder else f"{indent}📄 {name}")
 
-                if rename_prefix:
+                # Rename files (preserve extension)
+                if rename_prefix and not is_folder:
                     counter[0] += 1
                     base, ext = os.path.splitext(name)
-                    new_name = f"{rename_prefix}_{counter[0]}{ext}" if not is_folder else f"{rename_prefix}_{counter[0]}"
+                    new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
                     try:
                         await sync_to_async(api.renameNode, item, new_name)
                         LOGGER.info(f"Renamed: {name} → {new_name}")
                     except Exception as e:
-                        LOGGER.error(f"Rename failed for {name}: {e}")
+                        LOGGER.error(f"❌ Rename failed for {name}: {e}")
 
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
                     results.extend(sub_results)
-
             return results
 
         results = await traverse_and_rename(root)
         total_items = len(results)
-        elapsed_time = time.time() - start_time
-        time_taken = f"{elapsed_time:.2f} seconds"
+        time_taken = round(time.time() - start_time, 2)
 
         if not results:
-            await msg.edit_text("⚠️ <b>No files or folders found in this Mega account.</b>")
+            await msg.edit_text("⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.")
         elif not rename_prefix:
             display = "\n".join(results[:30])
-            more = f"\n\n<b>...and more ({total_items} total)</b>" if total_items > 30 else ""
+            more = f"\n\n...ᴀɴᴅ ᴍᴏʀᴇ ({total_items} ᴛᴏᴛᴀʟ)" if total_items > 30 else ""
             await msg.edit_text(
-                f"✅ <b>Logged in as:</b> <code>{email}</code>\n"
-                f"📦 <b>{total_items}</b> items found\n\n{display}{more}\n\n⏱️ <i>Took {time_taken}</i>",
+                f"✅ ʟᴏɢɪɴ: {email}\n📦 ɪᴛᴇᴍꜱ: {total_items}\n\n{display}{more}"
             )
         else:
             await msg.edit_text(
-                f"✅ <b>Renamed {total_items} items</b>\n"
-                f"🆔 <code>{email}</code>\n"
-                f"🔤 Prefix: <code>{rename_prefix}</code>\n"
-                f"⏱️ <i>Completed in {time_taken}</i>",
+                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total_items} ɪᴛᴇᴍꜱ ʀᴇᴄᴜʀꜱɪᴠᴇʟʏ\n"
+                f"🆔 {email}\n"
+                f"🔤 ᴘʀᴇꜰɪx: {rename_prefix}\n"
+                f"⏱️ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ɪɴ {time_taken} sᴇᴄᴏɴᴅꜱ</b>"
             )
+
+        await async_api.logout()
 
     except Exception as e:
         LOGGER.error(f"Error in rename_mega_command: {e}")
-        await send_message(message, f"❌ <b>Error:</b> <code>{e}</code>")
-
-    finally:
-        try:
-            if async_api:
-                await async_api.logout()
-            if api and mega_listener:
-                api.removeListener(mega_listener)
-            del api
-            del mega_listener
-            del async_api
-        except Exception as cleanup_err:
-            LOGGER.warning(f"Cleanup error: {cleanup_err}")
+        await send_message(message, f"❌ ᴇʀʀᴏʀ: {e}")
