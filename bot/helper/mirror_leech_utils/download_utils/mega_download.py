@@ -133,7 +133,7 @@ async def prefix_command(client, message):
     await send_message(
         message,
         f"✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}\n"
-        f"⚡ ɴᴏᴡ ʏᴏᴜ ᴄᴀɴ ᴜsᴇ /rename_mega ᴡɪᴛʜᴏᴜᴛ ᴛʏᴘɪɴɢ ɪᴛ."
+        f"⚡ ɴᴏᴡ ʏᴏᴜ ᴄᴀɴ ᴜsᴇ /rename ᴡɪᴛʜᴏᴜᴛ ᴛʏᴘɪɴɢ ɪᴛ."
     )
 
 
@@ -143,8 +143,8 @@ async def rename_mega_command(client, message):
         if len(args) < 3:
             return await send_message(
                 message,
-                "⚙️ ᴜsᴀɢᴇ:\n/rename_mega <email> <password> [prefix]\n\n"
-                "📘 ᴇxᴀᴍᴘʟᴇ:\n/rename_mega test@gmail.com mypass RenamedFile"
+                "⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password> [prefix]\n\n"
+                "📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass RenamedFile"
             )
 
         email, password = args[1], args[2]
