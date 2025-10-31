@@ -111,7 +111,7 @@ async def cb_back(client, query):
     buttons.data_button("ᴀʙᴏᴜᴛ •", "about")
     buttons.url_button(lang.START_BUTTON2, "https://t.me/dumpadmin")
     buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
-    reply_markup = buttons.build_menu(2)
+    reply_markup = buttons.build_menu(3)
 
     await query.answer()
     await query.message.edit_media(
