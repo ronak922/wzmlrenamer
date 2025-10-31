@@ -114,8 +114,7 @@ async def rename_mega_command(client, message):
         time_taken = round(time.time() - start_time, 2)
 
         # ─── RESULT ───
-        if not results:
-            await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
+        if not results:await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
         else:
             await msg.edit_text(
                 f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n\n"
@@ -131,13 +130,13 @@ async def rename_mega_command(client, message):
         LOGGER.error(f"❌ ᴍᴇɢᴀ ʀᴇɴᴀᴍᴇ ᴇʀʀᴏʀ: {e}", exc_info=True)
         await send_message(message, f"🚨 <b>ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ:</b>\n<code>{e}</code>")
 
-
 # ─────────────────────────────
 # /settings — Manage user settings
 # ─────────────────────────────
 async def settings_command(client, message):
     user_id = message.from_user.id
     await send_settings_view(client, message, user_id)
+
 
 # ─────────────────────────────
 # Helper — builds and sends settings view
@@ -165,8 +164,6 @@ async def send_settings_view(client, message, user_id, edit=False):
     buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
 
     markup = buttons.build_menu(1)
-
-    # Image banner URL
     photo_url = "https://i.ibb.co/9kCPFWrb/image.jpg"
 
     if edit:
@@ -183,7 +180,6 @@ async def send_settings_view(client, message, user_id, edit=False):
         )
 
 
-
 # ─────────────────────────────
 # Callback: Toggle folder rename
 # ─────────────────────────────
@@ -192,7 +188,8 @@ async def cb_toggle_folder(client, q):
     new_state = bool(int(q.data.split("_")[-1]))
     await database.set_user_folder_state(user_id, new_state)
     await q.answer(f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
-    await send_settings_view(q.message, user_id, edit=True)
+    await send_settings_view(client, q.message, user_id, edit=True)
+
 
 # ─────────────────────────────
 # Callback: Toggle swap mode
@@ -202,14 +199,16 @@ async def cb_toggle_swap(client, q):
     new_state = bool(int(q.data.split("_")[-1]))
     await database.set_user_swap_state(user_id, new_state)
     await q.answer(f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
-    await send_settings_view(q.message, user_id, edit=True)
+    await send_settings_view(client, q.message, user_id, edit=True)
+
 
 # ─────────────────────────────
 # Callback: Refresh settings
 # ─────────────────────────────
 async def cb_refresh_settings(client, q):
-    await edit_message(q.message, "<b>🔄 Refreshing settings...</b>")
-    await send_settings_view(q.message, q.from_user.id, edit=True)
+    await q.answer("🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ...", show_alert=False)
+    await send_settings_view(client, q.message, q.from_user.id, edit=True)
+
 
 # ─────────────────────────────
 # Register handlers
