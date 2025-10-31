@@ -10,6 +10,7 @@ from ....helper.ext_utils.db_handler import database
 from ....helper.telegram_helper.button_build import ButtonMaker
 from ....core.tg_client import TgClient
 import os, time, re
+import time as t
 from ....helper.telegram_helper.message_utils import *
 
 # ─────────────────────────────
@@ -30,7 +31,7 @@ async def prefix_command(_, message):
     await send_message(message, f"<b>✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}</b>")
 
 # ─────────────────────────────
-# /rename — Rename files in Mega (stylized + error logging)
+# /rename — Rename files in Mega (stable + error logging)
 # ─────────────────────────────
 async def rename_mega_command(client, message):
     try:
@@ -49,7 +50,7 @@ async def rename_mega_command(client, message):
         swap_mode = await database.get_user_swap_state(user_id)
 
         msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
-        start_time = time.time()
+        start_time = t.time()  # ✅ safe alias
 
         async_api = AsyncMega()
         async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
@@ -100,9 +101,10 @@ async def rename_mega_command(client, message):
                         base, ext = os.path.splitext(name)
                         new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
 
-                    try:await sync_to_async(api.renameNode, item, new_name)
-                        # LOGGER.info(f"<b>✅ ʀᴇɴᴀᴍᴇᴅ: {name} → {new_name}</b>")
-                    except Exception as e:LOGGER.error(f"<b>❌ ʀᴇɴᴀᴍᴇ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {name}: {e}</b>")
+                    try:
+                        await sync_to_async(api.renameNode, item, new_name)
+                    except Exception as e:
+                        LOGGER.error(f"❌ Rename failed for {name}: {e}")
 
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
@@ -112,10 +114,11 @@ async def rename_mega_command(client, message):
 
         results = await traverse_and_rename(root)
         total = len(results)
-        time_taken = round(time.time() - start_time, 2)
+        time_taken = round(t.time() - start_time, 2)  # ✅ use alias safely
 
         # ─── RESULT ───
-        if not results:await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
+        if not results:
+            await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
         else:
             await msg.edit_text(
                 f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n\n"
@@ -130,6 +133,7 @@ async def rename_mega_command(client, message):
     except Exception as e:
         LOGGER.error(f"❌ ᴍᴇɢᴀ ʀᴇɴᴀᴍᴇ ᴇʀʀᴏʀ: {e}", exc_info=True)
         await send_message(message, f"🚨 <b>ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ:</b>\n<code>{e}</code>")
+
 
 # ─────────────────────────────
 # /settings — Manage user settings
