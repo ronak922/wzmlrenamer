@@ -9,8 +9,6 @@ from cloudscraper import create_scraper
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from pyrogram import Client, filters
 from .. import LOGGER, user_data
-from..helper.mirror_leech_utils.download_utils.mega_renamer import *
-from ..helper.ext_utils.db_handler import database
 from ..core.config_manager import Config
 from ..core.tg_client import TgClient
 from ..helper.ext_utils.bot_utils import new_task, update_user_ldata
@@ -31,7 +29,7 @@ from ..helper.telegram_helper.message_utils import (
 START_MSG = """<b>
 ⚡ ʜᴇʏ ʙᴜᴅᴅʏ ~
 
-<blockquote>I ᴀᴍ ᴀɴ ᴀᴅᴠᴀɴᴄᴇᴅ ᴛᴇʟᴇɢʀᴀᴍ ʙᴏᴛ ᴛᴏ ʀᴇɴᴀᴍᴇʀ ᴍᴇɢᴀ ʟɪɴᴋs ᴡɪᴛʜ ᴇᴀsᴇ. ⚡
+<blockquote>I ᴀᴍ ᴀɴ ᴀᴅᴠᴀɴᴄᴇᴅ ᴛᴇʟᴇɢʀᴀᴍ ʙᴏᴛ ᴛᴏ ᴍᴇɢᴀ ʟɪɴᴋs ʀᴇɴᴀᴍᴇʀ ᴡɪᴛʜ ᴇᴀsᴇ. ⚡
 ᴍᴏᴅɪғɪᴇᴅ ʙʏ <a href="https://t.me/ProError">@ᴘʀᴏᴇʀʀᴏʀ</a></blockquote>
 </b>
 """
@@ -105,13 +103,10 @@ TgClient.bot.add_handler(CallbackQueryHandler(cb_about, filters=regex("^about$")
 async def cb_back(client, query):
     lang = Language()
     buttons = ButtonMaker()
-    user_id = query.from_user.id
-    rename_folders = await database.get_user_folder_state(user_id)
     buttons.url_button(lang.START_BUTTON1, "https://t.me/bhookibhabhi")
     buttons.data_button("ᴀʙᴏᴜᴛ •", "about")
     buttons.url_button(lang.START_BUTTON2, "https://t.me/dumpadmin")
-    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
-    reply_markup = buttons.build_menu(3)
+    reply_markup = buttons.build_menu(2)
 
     await query.answer()
     await query.message.edit_media(
@@ -124,52 +119,7 @@ async def cb_back(client, query):
 
 
 TgClient.bot.add_handler(CallbackQueryHandler(cb_back, filters=regex("^start_back$")))
-# ─────────────────────────────
-# 📂 Toggle folder rename
-# ─────────────────────────────
-async def cb_toggle_folder(client, callback_query):
-    try:
-        user_id = callback_query.from_user.id
-        new_state = bool(int(callback_query.data.split("_")[-1]))
-        await database.set_user_folder_state(user_id, new_state)
-        await callback_query.answer(
-            f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
-            show_alert=True
-        )
-        await refresh_settings_view(callback_query)
-    except Exception as e:
-        await callback_query.answer(f"❌ ᴇʀʀᴏʀ: {e}", show_alert=True)
 
-# ─────────────────────────────
-# Refresh message content
-# ─────────────────────────────
-async def refresh_settings_view(q):
-    user_id = q.from_user.id
-    prefix = await database.get_user_prefix(user_id)
-    rename_folders = await database.get_user_folder_state(user_id)
-    swap_mode = await database.get_user_swap_state(user_id)
-
-    prefix_text = prefix if prefix else "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
-    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
-    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
-
-    text = (
-        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
-        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
-        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
-        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
-    )
-
-    buttons = ButtonMaker()
-    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
-    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
-    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
-
-    reply_markup = buttons.build_menu(1)
-    await edit_message(q.message, text, reply_markup=reply_markup)
-
-TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters=regex("^toggle_folder_$")))
 
 async def cb_close(_, query):
     try:
@@ -239,7 +189,7 @@ async def ping(_, message):
     reply = await send_message(message, "<b>ᴘɪɴɢɪɴɢ..</b>")
     end_time = monotonic()
     await edit_message(
-        reply, f"<b>⚡ ᴘᴏɴɢ..!</b> <code>{int((end_time - start_time) * 1000)} ms</code>"
+        reply, f"<b>ᴘᴏɴɢ..!</b>\n <code>{int((end_time - start_time) * 1000)} ms</code>"
     )
 
 
