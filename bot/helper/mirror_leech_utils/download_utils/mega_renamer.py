@@ -154,7 +154,7 @@ async def send_settings_view(client, message, user_id, edit=False):
     markup = buttons.build_menu(1)
 
     # Image banner URL
-    photo_url = "https://i.ibb.co/G4RHktPc/image.jpg"
+    photo_url = "https://i.ibb.co/9kCPFWrb/image.jpg"
 
     if edit:
         await message.edit_media(
