@@ -10,6 +10,7 @@ from ....helper.ext_utils.db_handler import database
 from ....helper.telegram_helper.button_build import ButtonMaker
 from ....core.tg_client import TgClient
 import os, time, re
+from ....helper.telegram_helper.message_utils import *
 
 # ─────────────────────────────
 # /prefix — Save user prefix
@@ -152,10 +153,10 @@ async def send_settings_view(client, message, user_id, edit=False):
 
     text = (
         f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
+        f"<blockquote>🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
         f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
-        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
-        f"<blockquote>ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</blockquote></b>"
+        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}</blockquote>\n\n"
+        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
     )
 
     buttons = ButtonMaker()
@@ -176,8 +177,10 @@ async def send_settings_view(client, message, user_id, edit=False):
             chat_id=message.chat.id,
             photo=photo_url,
             caption=text,
-            reply_markup=markup
+            reply_markup=markup,
+            message_effect_id=5104841245755180586
         )
+    await delete_message(message)
 
 
 # ─────────────────────────────
