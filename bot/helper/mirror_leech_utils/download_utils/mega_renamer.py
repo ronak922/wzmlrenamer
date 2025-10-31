@@ -249,15 +249,6 @@ async def refresh_settings_view(q):
 # ─────────────────────────────
 # 🧩 Register handlers
 # ─────────────────────────────
-async def cb_debug(client, query):
-    print("⚡ CALLBACK:", query.data)
-    await query.answer("Got it ✅", show_alert=True)
-
-TgClient.bot.add_handler(CallbackQueryHandler(cb_debug))
-
-TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters=regex("^toggle_folder_$")))
-def register_settings_handlers():
-    from .... import TgClient
-    TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters.regex(r"^toggle_folder_\d+$")))
-    TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_swap, filters=regex(r"^toggle_swap_\d+$ ")))
-    TgClient.bot.add_handler(CallbackQueryHandler(cb_refresh_settings, filters=regex(r"^refresh_settings$")))
+TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters.regex(r"^toggle_folder_\d$")))
+TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_swap, filters.regex(r"^toggle_swap_\d$")))
+TgClient.bot.add_handler(CallbackQueryHandler(cb_refresh_settings, filters.regex(r"^refresh_settings$")))
