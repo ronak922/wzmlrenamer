@@ -8,6 +8,8 @@ from ...ext_utils.bot_utils import sync_to_async
 from ....helper.ext_utils.db_handler import database
 from ....helper.telegram_helper.button_build import ButtonMaker
 import os, time, re
+from ....core.tg_client import TgClient
+from pyrogram.filters import regex
 
 # ─────────────────────────────
 # /prefix — Save user prefix
@@ -208,4 +210,6 @@ async def refresh_settings_view(q):
 # Register handlers
 # ─────────────────────────────
 def register_handlers(TgClient):
-    TgClient.add_handler(CallbackQueryHandler(handle_settings_callback, filters.regex(r"^(toggle_folder_|toggle_swap_|refresh_settings)")))
+    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^toggle_folder_")))
+    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^toggle_swap_")))
+    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^refresh_settings$")))
