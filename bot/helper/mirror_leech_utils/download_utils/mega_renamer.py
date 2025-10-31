@@ -145,7 +145,7 @@ async def settings_command(_, message):
     buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
 
     reply_markup = buttons.build_menu(1)
-    await send_message(message, text, reply_markup=reply_markup)
+    await send_message(message, text, buttons=reply_markup)
 
 # ─────────────────────────────
 # Callback handler for settings
