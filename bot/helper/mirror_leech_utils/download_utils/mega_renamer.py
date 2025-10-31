@@ -249,6 +249,8 @@ async def refresh_settings_view(q):
 # ─────────────────────────────
 # 🧩 Register handlers
 # ─────────────────────────────
+
+TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters=regex("^toggle_folder_$")))
 def register_settings_handlers():
     from .... import TgClient
     TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters=regex(r"^toggle_folder_")))
