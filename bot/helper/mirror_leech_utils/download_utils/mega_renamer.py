@@ -29,7 +29,7 @@ async def prefix_command(_, message):
     await send_message(message, f"<b>✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}</b>")
 
 # ─────────────────────────────
-# /rename — Rename files in Mega
+# /rename — Rename files in Mega (stylized + error logging)
 # ─────────────────────────────
 async def rename_mega_command(client, message):
     try:
@@ -42,24 +42,37 @@ async def rename_mega_command(client, message):
 
         email, password = args[1], args[2]
         user_id = message.from_user.id
+
         rename_prefix = await database.get_user_prefix(user_id)
         rename_folders = await database.get_user_folder_state(user_id)
         swap_mode = await database.get_user_swap_state(user_id)
 
         msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
-
         start_time = time.time()
+
         async_api = AsyncMega()
         async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
+        # ─── LOGIN HANDLING ───
         try:
             await async_api.login(email, password)
             await msg.edit_text("<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
         except Exception as e:
-            return await msg.edit_text(f"❌ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:\n{e}")
+            err = str(e).lower()
+            LOGGER.error(f"❌ ᴍᴇɢᴀ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {email}: {e}")
 
+            if "credentials" in err or "eaccess" in err:
+                return await msg.edit_text("❌ <b>ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:</b> ɪɴᴠᴀʟɪᴅ ᴇᴍᴀɪʟ ᴏʀ ᴘᴀssᴡᴏʀᴅ.")
+            elif "enoent" in err:
+                return await msg.edit_text("⚠️ <b>ɴᴇᴛᴡᴏʀᴋ ᴇʀʀᴏʀ:</b> ᴍᴇɢᴀ ᴀᴄᴄᴏᴜɴᴛ ɴᴏᴛ ꜰᴏᴜɴᴅ.")
+            elif "too many" in err or "limit" in err:
+                return await msg.edit_text("🚫 <b>ᴛᴏᴏ ᴍᴀɴʏ ʟᴏɢɪɴ ᴀᴛᴛᴇᴍᴘᴛs.</b> ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ.")
+            else:
+                return await msg.edit_text(f"❌ <b>ᴜɴᴇxᴘᴇᴄᴛᴇᴅ ᴇʀʀᴏʀ:</b>\n<code>{e}</code>")
+
+        # ─── RENAME PROCESS ───
         root = api.getRootNode()
 
         async def traverse_and_rename(node, level=0, counter=[0]):
@@ -73,9 +86,9 @@ async def rename_mega_command(client, message):
                 name = item.getName()
                 is_folder = item.isFolder()
                 icon = "📁" if is_folder else "📄"
-                results.append(f"{'  ' * level}<blockquote expandable>{icon} {name}</blockquote>")
+                results.append(f"{'  ' * level}<b><blockquote expandable>{icon} {name}</blockquote></b>")
 
-                # ─── Rename logic ───
+                # ─── RENAME LOGIC ───
                 if rename_prefix and (not is_folder or rename_folders):
                     counter[0] += 1
                     new_name = name
@@ -86,11 +99,9 @@ async def rename_mega_command(client, message):
                         base, ext = os.path.splitext(name)
                         new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
 
-                    try:
-                        await sync_to_async(api.renameNode, item, new_name)
-                        LOGGER.info(f"Renamed: {name} → {new_name}")
-                    except Exception as e:
-                        LOGGER.error(f"❌ Rename failed for {name}: {e}")
+                    try:await sync_to_async(api.renameNode, item, new_name)
+                        # LOGGER.info(f"<b>✅ ʀᴇɴᴀᴍᴇᴅ: {name} → {new_name}</b>")
+                    except Exception as e:LOGGER.error(f"<b>❌ ʀᴇɴᴀᴍᴇ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {name}: {e}</b>")
 
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
@@ -102,22 +113,24 @@ async def rename_mega_command(client, message):
         total = len(results)
         time_taken = round(time.time() - start_time, 2)
 
+        # ─── RESULT ───
         if not results:
             await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
         else:
             await msg.edit_text(
-                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n"
-                f"🔤 ᴘʀᴇꜰɪx: {rename_prefix or 'None'}\n"
-                f"📂 ꜰᴏʟᴅᴇʀꜱ: {'✅' if rename_folders else '🚫'}\n"
-                f"🔁 sᴡᴀᴘ ᴍᴏᴅᴇ: {'✅' if swap_mode else '🚫'}\n"
+                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n\n"
+                f"🔤 ᴘʀᴇꜰɪx: <code>{rename_prefix or 'ɴᴏɴᴇ'}</code>\n"
+                f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if rename_folders else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
+                f"🔁 sᴡᴀᴘ ᴍᴏᴅᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if swap_mode else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
                 f"⏱️ {time_taken}s</b>"
             )
 
         await async_api.logout()
 
     except Exception as e:
-        LOGGER.error(f"Rename Mega error: {e}")
-        await send_message(message, f"❌ ᴇʀʀᴏʀ: {e}")
+        LOGGER.error(f"❌ ᴍᴇɢᴀ ʀᴇɴᴀᴍᴇ ᴇʀʀᴏʀ: {e}", exc_info=True)
+        await send_message(message, f"🚨 <b>ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ:</b>\n<code>{e}</code>")
+
 
 # ─────────────────────────────
 # /settings — Manage user settings
