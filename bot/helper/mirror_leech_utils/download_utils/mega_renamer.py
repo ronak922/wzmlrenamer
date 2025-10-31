@@ -51,49 +51,23 @@ async def prefix_command(_, message):
     await database.set_user_prefix(userid, prefix)
     await send_message(message, f"<b>✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}</b>")
 
-# ─────────────────────────────
-# /rename — Safe & Stable Version with progress + inline pause/resume/stop
-# ─────────────────────────────
 async def rename_mega_command(client, message):
-    user_id = message.from_user.id
-    username = message.from_user.first_name or "Unknown"
-
-    # Prevent double rename sessions for same user
-    if user_id in ACTIVE_RENAMES:
-        return await send_message(message, "⚠️ <b>ᴀ ʀᴇɴᴀᴍᴇ ᴊᴏʙ ɪꜱ ᴀʟʀᴇᴀᴅʏ ʀᴜɴɴɪɴɢ ꜰᴏʀ ʏᴏᴜ.</b>")
-
-    args = message.text.split(maxsplit=3)
-    if len(args) < 3:
-        return await send_message(
-            message,
-            "<b>⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
-        )
-
-    email, password = args[1], args[2]
-
-    # create per-user control events
-    cancel_event = asyncio.Event()
-    pause_event = asyncio.Event()
-    pause_event.set()  # start unpaused
-
-    # track counters and message info
-    ACTIVE_RENAMES[user_id] = {
-        "cancel": cancel_event,
-        "pause": pause_event,
-        "count": 0,
-        "total": 0,
-        "msg_chat": message.chat.id,
-        "msg_id": None
-    }
-
-    rename_prefix = await database.get_user_prefix(user_id)
-    rename_folders = await database.get_user_folder_state(user_id)
-    swap_mode = await database.get_user_swap_state(user_id)
-
     try:
-        msg = await message.reply_text("<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
-        # store msg id
-        ACTIVE_RENAMES[user_id]["msg_id"] = msg.message_id
+        args = message.text.split(maxsplit=3)
+        if len(args) < 3:
+            return await send_message(
+                message,
+                "<b>⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
+            )
+
+        email, password = args[1], args[2]
+        user_id = message.from_user.id
+
+        rename_prefix = await database.get_user_prefix(user_id)
+        rename_folders = await database.get_user_folder_state(user_id)
+        swap_mode = await database.get_user_swap_state(user_id)
+
+        msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
         start_time = t.time()
 
         async_api = AsyncMega()
@@ -101,187 +75,98 @@ async def rename_mega_command(client, message):
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
+        # Thread-safe Mega operations
         loop = asyncio.get_event_loop()
         semaphore = asyncio.Semaphore(2)
 
         await async_api.login(email, password)
         await msg.edit_text("<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
-
         root = api.getRootNode()
 
-        # estimate total items (synchronous recursion on API nodes - can be slow for very large trees)
-        def _count_nodes(node):
-            try:
-                children = api.getChildren(node)
-            except Exception:
-                return 0
-            if not children or children.size() == 0:
-                return 0
-            c = 0
-            for i in range(children.size()):
-                try:
-                    child = children.get(i)
-                except Exception:
-                    continue
-                c += 1
-                if child.isFolder():
-                    c += _count_nodes(child)
-            return c
+        # Helper: progress bar generator
+        def progress_bar(done, total, blocks=10):
+            if total == 0:
+                return "▱" * blocks, "0%"
+            pct = done / total
+            filled = int(pct * blocks)
+            bar = "▰" * filled + "▱" * (blocks - filled)
+            return bar, f"{pct*100:5.1f}%"
 
-        try:
-            total_items = _count_nodes(root)
-        except Exception:
-            total_items = 0
+        total_items = 0
+        renamed = 0
+        last_update = t.time()
 
-        ACTIVE_RENAMES[user_id]["total"] = total_items or 0
-
-        # initial buttons: pause/resume and stop share same callback (we'll toggle label)
-        buttons = InlineKeyboardMarkup(
-            [[
-                InlineKeyboardButton("⏸ ᴘᴀᴜsᴇ", callback_data=f"pause_resume_rename_{user_id}"),
-                InlineKeyboardButton("⏹ sᴛᴏᴘ", callback_data=f"stop_rename_{user_id}")
-            ]]
-        )
-
-        # write initial progress message
-        if total_items:
-            bar, pct = _progress_bar(0, total_items)
-            await msg.edit_text(
-                f"<b>🔁 ʀᴇɴᴀᴍɪɴɢ ɪɴ ᴘʀᴏɢʀᴇss</b>\n\n"
-                f"<blockquote>{bar} {pct}\n📦 0/{total_items} ɪᴛᴇᴍꜱ</blockquote>\n\n"
-                f"<i>ᴛᴀᴘ ʙᴇʟᴏᴡ ᴛᴏ ᴘᴀᴜsᴇ ᴏʀ sᴛᴏᴘ</i>",
-                reply_markup=buttons
-            )
-        else:
-            await msg.edit_text(
-                "<b>🔁 ʀᴇɴᴀᴍɪɴɢ ɪɴ ᴘʀᴏɢʀᴇss</b>\n\n"
-                "<blockquote>ɪᴛᴇᴍ ᴄᴏᴜɴᴛ ᴜɴᴋɴᴏᴡɴ — ᴘʀᴏɢʀᴇss ʀᴇᴘᴏʀᴛs ᴡɪʟʟ ᴜᴘᴅᴀᴛᴇ ɪɴ ʟɪɴᴇ.</blockquote>\n\n"
-                "<i>ᴛᴀᴘ ʙᴇʟᴏᴡ ᴛᴏ ᴘᴀᴜsᴇ ᴏʀ sᴛᴏᴘ</i>",
-                reply_markup=buttons
-            )
-
-        # safe rename call wrapper
         async def safe_rename(item, new_name):
             async with semaphore:
-                await asyncio.sleep(random.uniform(0.05, 0.12))
+                await asyncio.sleep(random.uniform(0.05, 0.15))
                 return await sync_to_async(api.renameNode, item, new_name)
 
-        # traversal coroutine (async)
-        async def traverse_and_rename(node, level=0, counter=[0]):
-            # cancel check
-            if ACTIVE_RENAMES[user_id]["cancel"].is_set():
-                return
+        async def traverse_and_rename(node, counter=[0]):
+            nonlocal total_items, renamed, last_update
 
-            try:
-                children = api.getChildren(node)
-            except Exception as e:
-                LOGGER.warning(f"failed to get children: {e}")
-                return
-
+            children = api.getChildren(node)
             if not children or children.size() == 0:
                 return
 
+            total_items += children.size()
+
             for i in range(children.size()):
-                # stop requested?
-                if ACTIVE_RENAMES[user_id]["cancel"].is_set():
-                    return
-
-                # pause handling: wait until pause event is set
-                await ACTIVE_RENAMES[user_id]["pause"].wait()
-
-                try:
-                    item = children.get(i)
-                except Exception:
-                    continue
-
-                try:
-                    name = item.getName()
-                except Exception:
-                    name = "unknown"
-
-                is_folder = False
-                try:
-                    is_folder = item.isFolder()
-                except Exception:
-                    is_folder = False
+                item = children.get(i)
+                name = item.getName()
+                is_folder = item.isFolder()
 
                 if rename_prefix and (not is_folder or rename_folders):
                     counter[0] += 1
-                    seq = counter[0]
+                    renamed += 1
                     if swap_mode:
-                        try:
-                            new_name = re.sub(r"@\w+", rename_prefix, name)
-                        except Exception:
-                            new_name = f"{rename_prefix}_{seq}"
+                        new_name = re.sub(r"@\w+", rename_prefix, name)
                     else:
                         base, ext = os.path.splitext(name)
-                        new_name = f"{rename_prefix}_{seq}{ext}" if ext else f"{rename_prefix}_{seq}"
+                        new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
 
                     try:
                         await safe_rename(item, new_name)
                     except Exception as e:
                         LOGGER.warning(f"❌ Rename failed for {name}: {e}")
 
-                    # update counters
-                    ACTIVE_RENAMES[user_id]["count"] += 1
-
-                    # update progress UI every few seconds or every N items
-                    done = ACTIVE_RENAMES[user_id]["count"]
-                    total = ACTIVE_RENAMES[user_id]["total"] or done
-                    # create visual bar
-                    bar, pct = _progress_bar(done, total, blocks=5)
-                    try:
-                        await edit_message(
-                            msg,
-                            f"<b>🔁 ʀᴇɴᴀᴍɪɴɢ ɪɴ ᴘʀᴏɢʀᴇss</b>\n\n"
-                            f"<blockquote>{bar} {pct}\n📦 {done}/{total} ɪᴛᴇᴍꜱ</blockquote>\n\n"
-                            f"👤 <b>{username}</b>  —  ᴘʀᴇꜰɪx: <code>{rename_prefix or 'ɴᴏɴᴇ'}</code>",
-                            reply_markup=buttons
-                        )
-                    except Exception:
-                        # ignore edit failures (message deleted or edited elsewhere)
-                        pass
+                # update progress every 3s
+                if t.time() - last_update >= 3:
+                    last_update = t.time()
+                    bar, pct = progress_bar(renamed, total_items)
+                    elapsed = round(t.time() - start_time, 1)
+                    speed = renamed / elapsed if elapsed else 0
+                    await edit_message(
+                        msg,
+                        (
+                            f"<b>🔁 ʀᴇɴᴀᴍɪɴɢ ɪɴ ᴘʀᴏɢʀᴇss\n\n"
+                            f"{bar} {pct}\n"
+                            f"📦 {renamed}/{total_items} ɪᴛᴇᴍꜱ\n"
+                            f"⏱️ {elapsed}s — ⚙️ {speed:.2f} files/s\n\n"
+                            f"👤 <b>ᴘʀᴇꜰɪx:</b> <code>{rename_prefix or 'ɴᴏɴᴇ'}</code></b>"
+                        ),
+                    )
 
                 if is_folder:
-                    # small delay to avoid hammering
-                    await asyncio.sleep(0.03)
-                    await traverse_and_rename(item, level + 1, counter)
+                    await traverse_and_rename(item, counter)
 
-        # run traversal - wrap to catch cancellation
-        try:
-            await traverse_and_rename(root)
-        except Exception as e:
-            LOGGER.error(f"error during traverse_and_rename: {e}", exc_info=True)
-
-        # logout and finish
-        try:
-            await async_api.logout()
-        except Exception:
-            pass
+        await traverse_and_rename(root)
+        await async_api.logout()
 
         elapsed = round(t.time() - start_time, 2)
-        done = ACTIVE_RENAMES[user_id]["count"]
-        total = ACTIVE_RENAMES[user_id]["total"] or done
-
-        LAST_RENAMES.appendleft((user_id, username, elapsed))
-        # clean active before editing final (so callbacks see no job)
-        ACTIVE_RENAMES.pop(user_id, None)
-
+        bar, pct = progress_bar(renamed, total_items)
         await msg.edit_text(
-            f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {done}/{total} ɪᴛᴇᴍꜱ\n\n"
+            f"<b>✅ ʀᴇɴᴀᴍᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ</b>\n\n"
+            f"<blockquote>{bar} {pct}\n📦 {renamed}/{total_items} ɪᴛᴇᴍꜱ</blockquote>\n\n"
             f"🔤 ᴘʀᴇꜰɪx: <code>{rename_prefix or 'ɴᴏɴᴇ'}</code>\n"
             f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if rename_folders else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}\n"
             f"🔁 sᴡᴀᴘ ᴍᴏᴅᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if swap_mode else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}\n"
-            f"⏱️ {elapsed}s</b>"
+            f"⏱️ {elapsed}s — ⚙️ {renamed/elapsed:.2f} files/s"
         )
-        return
 
     except Exception as e:
         LOGGER.error(f"❌ rename_mega_command crashed: {e}", exc_info=True)
-        # ensure cleanup
-        ACTIVE_RENAMES.pop(user_id, None)
         await send_message(message, f"🚨 <b>ᴇʀʀᴏʀ ᴏᴄᴄᴜʀʀᴇᴅ:</b>\n<code>{e}</code>")
-        return
+
 
 # ─────────────────────────────
 # /status — Check rename status
