@@ -7,9 +7,8 @@ from ...telegram_helper.message_utils import send_message, edit_message
 from ...ext_utils.bot_utils import sync_to_async
 from ....helper.ext_utils.db_handler import database
 from ....helper.telegram_helper.button_build import ButtonMaker
-import os, time, re
 from ....core.tg_client import TgClient
-from pyrogram.filters import regex
+import os, time, re
 
 # ─────────────────────────────
 # /prefix — Save user prefix
@@ -46,7 +45,7 @@ async def rename_mega_command(client, message):
         rename_folders = await database.get_user_folder_state(user_id)
         swap_mode = await database.get_user_swap_state(user_id)
 
-        msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
+        msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
 
         start_time = time.time()
         async_api = AsyncMega()
@@ -81,7 +80,6 @@ async def rename_mega_command(client, message):
                     new_name = name
 
                     if swap_mode:
-                        # 🔁 Swap @username in name
                         new_name = re.sub(r"@\w+", rename_prefix, name)
                     else:
                         base, ext = os.path.splitext(name)
@@ -121,39 +119,16 @@ async def rename_mega_command(client, message):
         await send_message(message, f"❌ ᴇʀʀᴏʀ: {e}")
 
 # ─────────────────────────────
-# /settings — Manage settings
+# /settings — Manage user settings
 # ─────────────────────────────
 async def settings_command(_, message):
     user_id = message.from_user.id
-    prefix = await database.get_user_prefix(user_id) or "None set"
-    rename_folders = await database.get_user_folder_state(user_id)
-    swap_mode = await database.get_user_swap_state(user_id)
-
-    prefix_text = prefix if prefix else "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
-    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪsᴀʙʟᴇᴅ"
-    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪsᴀʙʟᴇᴅ"
-
-    text = (
-        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
-        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
-        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
-        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
-    )
-
-    buttons = ButtonMaker()
-    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
-    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
-    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
-
-    reply_markup = buttons.build_menu(1)
-    await send_message(message, text, buttons=reply_markup)
+    await send_settings_view(message, user_id)
 
 # ─────────────────────────────
-# 🔧 Helper: refresh settings message
+# Helper — builds and sends settings view
 # ─────────────────────────────
-async def refresh_settings_view(q):
-    user_id = q.from_user.id
+async def send_settings_view(target, user_id, edit=False):
     prefix = await database.get_user_prefix(user_id)
     rename_folders = await database.get_user_folder_state(user_id)
     swap_mode = await database.get_user_swap_state(user_id)
@@ -175,79 +150,42 @@ async def refresh_settings_view(q):
     buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
     buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
 
-    reply_markup = buttons.build_menu(1)
-    await edit_message(q.message, text, buttons=reply_markup)
+    markup = buttons.build_menu(1)
+
+    if edit:
+        await edit_message(target, text, buttons=markup)
+    else:
+        await send_message(target, text, buttons=markup)
 
 # ─────────────────────────────
-# 📂 Toggle folder rename
+# Callback: Toggle folder rename
 # ─────────────────────────────
-async def cb_toggle_folder(client, callback_query):
-    try:
-        user_id = callback_query.from_user.id
-        new_state = bool(int(callback_query.data.split("_")[-1]))
-        await database.set_user_folder_state(user_id, new_state)
-        await callback_query.answer(
-            f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
-            show_alert=True
-        )
-        await refresh_settings_view(callback_query)
-    except Exception as e:
-        await callback_query.answer(f"❌ ᴇʀʀᴏʀ: {e}", show_alert=True)
-
-# ─────────────────────────────
-# 🔁 Toggle name swap
-# ─────────────────────────────
-async def cb_toggle_swap(client, callback_query):
-    try:
-        user_id = callback_query.from_user.id
-        new_state = bool(int(callback_query.data.split("_")[-1]))
-        await database.set_user_swap_state(user_id, new_state)
-        await callback_query.answer(
-            f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
-            show_alert=True
-        )
-        await refresh_settings_view(callback_query)
-    except Exception as e:
-        await callback_query.answer(f"❌ ᴇʀʀᴏʀ: {e}", show_alert=True)
-
-# ─────────────────────────────
-# 🔄 Refresh settings
-# ─────────────────────────────
-async def cb_refresh_settings(client, callback_query):
-    await callback_query.answer("🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ...", show_alert=False)
-    await refresh_settings_view(callback_query)
-
-# ─────────────────────────────
-# Refresh message content
-# ─────────────────────────────
-async def refresh_settings_view(q):
+async def cb_toggle_folder(client, q):
     user_id = q.from_user.id
-    prefix = await database.get_user_prefix(user_id)
-    rename_folders = await database.get_user_folder_state(user_id)
-    swap_mode = await database.get_user_swap_state(user_id)
-
-    prefix_text = prefix if prefix else "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
-    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
-    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
-
-    text = (
-        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
-        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
-        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
-        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
-    )
-
-    buttons = ButtonMaker()
-    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
-    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
-    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
-
-    reply_markup = buttons.build_menu(1)
-    await edit_message(q.message, text, reply_markup=reply_markup)
+    new_state = bool(int(q.data.split("_")[-1]))
+    await database.set_user_folder_state(user_id, new_state)
+    await q.answer(f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
+    await send_settings_view(q.message, user_id, edit=True)
 
 # ─────────────────────────────
-# 🧩 Register handlers
+# Callback: Toggle swap mode
+# ─────────────────────────────
+async def cb_toggle_swap(client, q):
+    user_id = q.from_user.id
+    new_state = bool(int(q.data.split("_")[-1]))
+    await database.set_user_swap_state(user_id, new_state)
+    await q.answer(f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
+    await send_settings_view(q.message, user_id, edit=True)
+
+# ─────────────────────────────
+# Callback: Refresh settings
+# ─────────────────────────────
+async def cb_refresh_settings(client, q):
+    await edit_message(q.message, "<b>🔄 Refreshing settings...</b>")
+    await send_settings_view(q.message, q.from_user.id, edit=True)
+
+# ─────────────────────────────
+# Register handlers
 # ─────────────────────────────
 TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters.regex(r"^toggle_folder_\d$")))
 TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_swap, filters.regex(r"^toggle_swap_\d$")))
