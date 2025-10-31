@@ -91,7 +91,7 @@ async def rename_mega_command(client, message):
     swap_mode = await database.get_user_swap_state(user_id)
 
     try:
-        msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
+        msg = await message.reply_text("<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
         # store msg id
         ACTIVE_RENAMES[user_id]["msg_id"] = msg.message_id
         start_time = t.time()
