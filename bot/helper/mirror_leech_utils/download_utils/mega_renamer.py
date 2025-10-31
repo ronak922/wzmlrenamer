@@ -122,9 +122,9 @@ async def rename_mega_command(client, message):
 # ─────────────────────────────
 # /settings — Manage user settings
 # ─────────────────────────────
-async def settings_command(_, message):
+async def settings_command(client, message):
     user_id = message.from_user.id
-    await send_settings_view(message, user_id)
+    await send_settings_view(client, message, user_id)
 
 # ─────────────────────────────
 # Helper — builds and sends settings view
