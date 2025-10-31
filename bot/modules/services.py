@@ -9,6 +9,8 @@ from cloudscraper import create_scraper
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from pyrogram import Client, filters
 from .. import LOGGER, user_data
+from..helper.mirror_leech_utils.download_utils.mega_renamer import *
+from ..helper.ext_utils.db_handler import database
 from ..core.config_manager import Config
 from ..core.tg_client import TgClient
 from ..helper.ext_utils.bot_utils import new_task, update_user_ldata
@@ -103,9 +105,12 @@ TgClient.bot.add_handler(CallbackQueryHandler(cb_about, filters=regex("^about$")
 async def cb_back(client, query):
     lang = Language()
     buttons = ButtonMaker()
+    user_id = query.from_user.id
+    rename_folders = await database.get_user_folder_state(user_id)
     buttons.url_button(lang.START_BUTTON1, "https://t.me/bhookibhabhi")
     buttons.data_button("ᴀʙᴏᴜᴛ •", "about")
     buttons.url_button(lang.START_BUTTON2, "https://t.me/dumpadmin")
+    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
     reply_markup = buttons.build_menu(2)
 
     await query.answer()
