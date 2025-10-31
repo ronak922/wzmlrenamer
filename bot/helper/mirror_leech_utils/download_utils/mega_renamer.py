@@ -150,32 +150,72 @@ async def settings_command(_, message):
     await send_message(message, text, buttons=reply_markup)
 
 # ─────────────────────────────
-# Callback handler for settings
+# 🔧 Helper: refresh settings message
 # ─────────────────────────────
-async def handle_settings_callback(client, callback_query):
-    user_id = callback_query.from_user.id
-    data = callback_query.data
+async def refresh_settings_view(q):
+    user_id = q.from_user.id
+    prefix = await database.get_user_prefix(user_id)
+    rename_folders = await database.get_user_folder_state(user_id)
+    swap_mode = await database.get_user_swap_state(user_id)
 
-    if data.startswith("toggle_folder_"):
-        new_state = bool(int(data.split("_")[-1]))
+    prefix_text = prefix or "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
+    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪsᴀʙʟᴇᴅ"
+    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪsᴀʙʟᴇᴅ"
+
+    text = (
+        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
+        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
+        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
+        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
+    )
+
+    buttons = ButtonMaker()
+    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
+    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
+    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
+
+    reply_markup = buttons.build_menu(1)
+    await edit_message(q.message, text, buttons=reply_markup)
+
+# ─────────────────────────────
+# 📂 Toggle folder rename
+# ─────────────────────────────
+async def cb_toggle_folder(client, callback_query):
+    try:
+        user_id = callback_query.from_user.id
+        new_state = bool(int(callback_query.data.split("_")[-1]))
         await database.set_user_folder_state(user_id, new_state)
         await callback_query.answer(
             f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
             show_alert=True
         )
         await refresh_settings_view(callback_query)
+    except Exception as e:
+        await callback_query.answer(f"❌ ᴇʀʀᴏʀ: {e}", show_alert=True)
 
-    elif data.startswith("toggle_swap_"):
-        new_state = bool(int(data.split("_")[-1]))
+# ─────────────────────────────
+# 🔁 Toggle name swap
+# ─────────────────────────────
+async def cb_toggle_swap(client, callback_query):
+    try:
+        user_id = callback_query.from_user.id
+        new_state = bool(int(callback_query.data.split("_")[-1]))
         await database.set_user_swap_state(user_id, new_state)
         await callback_query.answer(
             f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
             show_alert=True
         )
         await refresh_settings_view(callback_query)
+    except Exception as e:
+        await callback_query.answer(f"❌ ᴇʀʀᴏʀ: {e}", show_alert=True)
 
-    elif data == "refresh_settings":
-        await refresh_settings_view(callback_query)
+# ─────────────────────────────
+# 🔄 Refresh settings
+# ─────────────────────────────
+async def cb_refresh_settings(client, callback_query):
+    await callback_query.answer("🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ...", show_alert=False)
+    await refresh_settings_view(callback_query)
 
 # ─────────────────────────────
 # Refresh message content
@@ -207,9 +247,10 @@ async def refresh_settings_view(q):
     await edit_message(q.message, text, reply_markup=reply_markup)
 
 # ─────────────────────────────
-# Register handlers
+# 🧩 Register handlers
 # ─────────────────────────────
-def register_handlers(TgClient):
-    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^toggle_folder_")))
-    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^toggle_swap_")))
-    TgClient.bot.add_handler(CallbackQueryHandler(handle_settings_callback, filters=regex("^refresh_settings$")))
+def register_settings_handlers():
+    from .... import TgClient
+    TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_folder, filters=regex(r"^toggle_folder_")))
+    TgClient.bot.add_handler(CallbackQueryHandler(cb_toggle_swap, filters=regex(r"^toggle_swap_")))
+    TgClient.bot.add_handler(CallbackQueryHandler(cb_refresh_settings, filters=regex(r"^refresh_settings$")))
