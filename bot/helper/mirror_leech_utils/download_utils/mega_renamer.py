@@ -9,9 +9,10 @@ from ...ext_utils.bot_utils import sync_to_async
 from ....helper.ext_utils.db_handler import database
 from ....helper.telegram_helper.button_build import ButtonMaker
 from ....core.tg_client import TgClient
-import os, time, re
+import os, time, re, random, asyncio
 import time as t
 from ....helper.telegram_helper.message_utils import *
+import gc
 
 # ─────────────────────────────
 # /prefix — Save user prefix
@@ -29,6 +30,7 @@ async def prefix_command(_, message):
     prefix = args[1].strip()
     await database.set_user_prefix(userid, prefix)
     await send_message(message, f"<b>✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}</b>")
+
 
 # ─────────────────────────────
 # /rename — Rename files in Mega (stable + error logging)
@@ -65,6 +67,17 @@ async def rename_mega_command(client, message):
             err = str(e).lower()
             LOGGER.error(f"❌ ᴍᴇɢᴀ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {email}: {e}")
 
+            # best-effort logout & cleanup before returning
+            try:
+                await async_api.logout()
+            except Exception:
+                pass
+            try:
+                del async_api.api
+            except Exception:
+                pass
+            gc.collect()
+
             if "credentials" in err or "eaccess" in err:
                 return await msg.edit_text("❌ <b>ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:</b> ɪɴᴠᴀʟɪᴅ ᴇᴍᴀɪʟ ᴏʀ ᴘᴀssᴡᴏʀᴅ.")
             elif "enoent" in err:
@@ -85,8 +98,15 @@ async def rename_mega_command(client, message):
             results = []
             for i in range(children.size()):
                 item = children.get(i)
-                name = item.getName()
-                is_folder = item.isFolder()
+                try:
+                    name = item.getName()
+                except Exception:
+                    name = "unknown"
+                try:
+                    is_folder = item.isFolder()
+                except Exception:
+                    is_folder = False
+
                 icon = "📁" if is_folder else "📄"
                 results.append(f"{'  ' * level}<b><blockquote expandable>{icon} {name}</blockquote></b>")
 
@@ -96,7 +116,10 @@ async def rename_mega_command(client, message):
                     new_name = name
 
                     if swap_mode:
-                        new_name = re.sub(r"@\w+", rename_prefix, name)
+                        try:
+                            new_name = re.sub(r"@\w+", rename_prefix, name)
+                        except Exception:
+                            new_name = f"{rename_prefix}_{counter[0]}"
                     else:
                         base, ext = os.path.splitext(name)
                         new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
@@ -128,7 +151,41 @@ async def rename_mega_command(client, message):
                 f"⏱️ {time_taken}s</b>"
             )
 
-        await async_api.logout()
+        # ─────────────────────────────────────────────
+        # important cleanup to avoid MEGA sdk segfaults
+        # ─────────────────────────────────────────────
+        try:
+            await async_api.logout()
+        except Exception:
+            # ignore logout errors but attempt further cleanup
+            pass
+
+        # small pause to let MEGA threads finish cleanup
+        try:
+            await asyncio.sleep(0.3)
+        except Exception:
+            pass
+
+        # remove references and force GC (helps avoid C-extension destructor races)
+        try:
+            # If MegaApi exposes removeListener, attempt to remove (best-effort)
+            try:
+                api.removeListener(mega_listener)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        try:
+            del async_api
+        except Exception:
+            pass
+        try:
+            del api
+        except Exception:
+            pass
+
+        gc.collect()
 
     except Exception as e:
         LOGGER.error(f"❌ ᴍᴇɢᴀ ʀᴇɴᴀᴍᴇ ᴇʀʀᴏʀ: {e}", exc_info=True)
@@ -194,7 +251,7 @@ async def cb_toggle_folder(client, q):
     user_id = q.from_user.id
     new_state = bool(int(q.data.split("_")[-1]))
     await database.set_user_folder_state(user_id, new_state)
-    await q.answer(f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
+    await q.answer(f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪsᴀʙʟᴇᴅ'}", show_alert=True)
     await send_settings_view(client, q.message, user_id, edit=True)
 
 
@@ -205,7 +262,7 @@ async def cb_toggle_swap(client, q):
     user_id = q.from_user.id
     new_state = bool(int(q.data.split("_")[-1]))
     await database.set_user_swap_state(user_id, new_state)
-    await q.answer(f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪꜱᴀʙʟᴇᴅ'}", show_alert=True)
+    await q.answer(f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'✅ ᴇɴᴀʙʟᴇᴅ' if new_state else '🚫 ᴅɪsᴀʙʟᴇᴅ'}", show_alert=True)
     await send_settings_view(client, q.message, user_id, edit=True)
 
 
