@@ -40,6 +40,12 @@ def add_handlers():
             filters=command("settings", case_sensitive=True)
         )
     )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            ping,
+            filters=command("ping", case_sensitive=True)
+        )
+    )
 
     TgClient.bot.add_handler(
         MessageHandler(
@@ -306,13 +312,7 @@ def add_handlers():
     # TgClient.bot.add_handler(
     #     CallbackQueryHandler(imdb_callback, filters=regex("^imdb"))
     # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         ping,
-    #         filters=command(BotCommands.PingCommand, case_sensitive=True)
-    #         & CustomFilters.authorized,
-    #     )
-    # )
+
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         bot_help,
