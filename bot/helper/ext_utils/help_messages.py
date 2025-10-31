@@ -388,6 +388,7 @@ def get_bot_commands():
         "rename": "⚙️ ʀᴇɴᴀᴍᴇ ᴀʟʟ ᴍᴇɢᴀ ғɪʟᴇs",
         "settings": "⚙️ ᴜᴘᴅᴀᴛᴇ ʏᴏᴜʀ ᴜsᴇʀ sᴇᴛᴛɪɴɢs",
         "ping": "🏓 ᴘɪɴɢ ᴛʜᴇ ʙᴏᴛ",
+        "status": "📊 sʜᴏᴡ ʀᴇɴᴀᴍᴇ sᴛᴀᴛᴜs ( ᴀᴅᴍɪɴ ᴏɴʟʏ )",
     }
 
     commands = static_commands.copy()

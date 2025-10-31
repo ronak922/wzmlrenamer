@@ -49,6 +49,15 @@ def add_handlers():
 
     TgClient.bot.add_handler(
         MessageHandler(
+            rename_status,
+            filters=command("status", case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
+
+
+    TgClient.bot.add_handler(
+        MessageHandler(
             authorize,
             filters=command(BotCommands.AuthorizeCommand, case_sensitive=True)
             & CustomFilters.sudo,
