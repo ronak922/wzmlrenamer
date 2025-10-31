@@ -71,27 +71,27 @@ def add_handlers():
             for cmd, desc in BOT_COMMANDS.items()
         ]
     )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         unauthorize,
-    #         filters=command(BotCommands.UnAuthorizeCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         add_sudo,
-    #         filters=command(BotCommands.AddSudoCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         remove_sudo,
-    #         filters=command(BotCommands.RmSudoCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            unauthorize,
+            filters=command(BotCommands.UnAuthorizeCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            add_sudo,
+            filters=command(BotCommands.AddSudoCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            remove_sudo,
+            filters=command(BotCommands.RmSudoCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         send_bot_settings,
@@ -99,13 +99,13 @@ def add_handlers():
     #         & CustomFilters.sudo,
     #     )
     # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         broadcast,
-    #         filters=command(BotCommands.BroadcastCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            broadcast,
+            filters=command(BotCommands.BroadcastCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
     # TgClient.bot.add_handler(
     #     CallbackQueryHandler(
     #         edit_bot_settings, filters=regex("^botset") & CustomFilters.sudo
