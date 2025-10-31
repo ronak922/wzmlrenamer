@@ -1,5 +1,6 @@
 from mega import MegaApi
 from pyrogram import filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from pyrogram.handlers import CallbackQueryHandler
 from .... import LOGGER
 from ...listeners.mega_listener import AsyncMega, MegaAppListener
@@ -128,7 +129,7 @@ async def settings_command(_, message):
 # ─────────────────────────────
 # Helper — builds and sends settings view
 # ─────────────────────────────
-async def send_settings_view(target, user_id, edit=False):
+async def send_settings_view(client, message, user_id, edit=False):
     prefix = await database.get_user_prefix(user_id)
     rename_folders = await database.get_user_folder_state(user_id)
     swap_mode = await database.get_user_swap_state(user_id)
@@ -138,11 +139,11 @@ async def send_settings_view(target, user_id, edit=False):
     swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪsᴀʙʟᴇᴅ"
 
     text = (
-        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ</b>\n\n"
         f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
         f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
         f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
-        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
+        f"<blockquote>ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</blockquote>"
     )
 
     buttons = ButtonMaker()
@@ -152,10 +153,23 @@ async def send_settings_view(target, user_id, edit=False):
 
     markup = buttons.build_menu(1)
 
+    # Image banner URL
+    photo_url = "https://i.ibb.co/G4RHktPc/image.jpg"
+
     if edit:
-        await edit_message(target, text, buttons=markup)
+        await message.edit_media(
+            InputMediaPhoto(photo_url, caption=text),
+            reply_markup=markup
+        )
     else:
-        await send_message(target, text, buttons=markup)
+        await client.send_photo(
+            chat_id=message.chat.id,
+            photo=photo_url,
+            caption=text,
+            reply_markup=markup
+        )
+
+
 
 # ─────────────────────────────
 # Callback: Toggle folder rename
