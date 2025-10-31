@@ -206,6 +206,7 @@ async def cb_toggle_swap(client, q):
 # Callback: Refresh settings
 # ─────────────────────────────
 async def cb_refresh_settings(client, q):
+    await edit_message(q.message, "<b>🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ ᴜsᴇʀ ꜱᴇᴛᴛɪɴɢꜱ...</b>")
     await q.answer("🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ...", show_alert=False)
     await send_settings_view(client, q.message, q.from_user.id, edit=True)
 
