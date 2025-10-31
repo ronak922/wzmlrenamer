@@ -34,6 +34,12 @@ def add_handlers():
             filters=command("rename", case_sensitive=True)
         )
     )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            settings_command,
+            filters=command("settings", case_sensitive=True)
+        )
+    )
 
     TgClient.bot.add_handler(
         MessageHandler(

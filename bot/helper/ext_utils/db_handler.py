@@ -231,5 +231,32 @@ class DbManager:
             return
         await self.db[name][TgClient.ID].drop()
 
+    async def set_user_prefix(self, user_id: int, prefix: str):
+        await self.db.prefix.update_one({"_id": user_id}, {"$set": {"prefix": prefix}}, upsert=True)
+
+    async def get_user_prefix(self, user_id: int):
+        doc = await self.db.prefix.find_one({"_id": user_id})
+        return doc.get("prefix") if doc else None
+
+    async def set_user_folder_state(self, user_id: int, enabled: bool):
+        await self.db.folder_state.update_one({"_id": user_id}, {"$set": {"enabled": enabled}}, upsert=True)
+
+    async def get_user_folder_state(self, user_id: int) -> bool:
+        doc = await self.db.folder_state.find_one({"_id": user_id})
+        return doc.get("enabled", False) if doc else False
+    
+    async def set_user_swap_state(self, user_id: int, state: bool):
+        if self._return:
+            return
+        await self.db.swap_state.update_one(
+            {"_id": user_id}, {"$set": {"swap_mode": state}}, upsert=True
+        )
+
+    async def get_user_swap_state(self, user_id: int) -> bool:
+        if self._return:
+            return False
+        doc = await self.db.swap_state.find_one({"_id": user_id})
+        return doc.get("swap_mode", False) if doc else False
+
 
 database = DbManager()

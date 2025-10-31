@@ -386,6 +386,7 @@ def get_bot_commands():
         "start": "⚡ ʟᴇᴛ ᴛʜᴇ ʜᴜɴᴛ ʙᴇɢɪɴ",
         "prefix": "⚡ sᴇᴛ ʏᴏᴜʀ ᴘʀᴇғɪx ғᴏʀ ʀᴇɴᴀᴍᴇ",
         "rename": "⚙️ ʀᴇɴᴀᴍᴇ ᴀʟʟ ᴍᴇɢᴀ ғɪʟᴇs",
+        "settings": "⚙️ ᴜᴘᴅᴀᴛᴇ ʏᴏᴜʀ ᴜsᴇʀ sᴇᴛᴛɪɴɢs",
     }
 
     commands = static_commands.copy()

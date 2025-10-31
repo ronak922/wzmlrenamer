@@ -1,69 +1,62 @@
 from mega import MegaApi
+from pyrogram import filters
+from pyrogram.handlers import CallbackQueryHandler
 from .... import LOGGER
 from ...listeners.mega_listener import AsyncMega, MegaAppListener
-from ...telegram_helper.message_utils import send_message
+from ...telegram_helper.message_utils import send_message, edit_message
 from ...ext_utils.bot_utils import sync_to_async
-import os, time
+from ....helper.ext_utils.db_handler import database
+from ....helper.telegram_helper.button_build import ButtonMaker
+import os, time, re
 
-# Store user prefixes temporarily in memory
-USER_PREFIXES = {}
-
-
-async def prefix_command(client, message):
-    """Set custom rename prefix for a user."""
+# ─────────────────────────────
+# /prefix — Save user prefix
+# ─────────────────────────────
+async def prefix_command(_, message):
+    userid = message.from_user.id
     args = message.text.split(maxsplit=1)
+
     if len(args) < 2:
         return await send_message(
             message,
-            "⚙️ ᴜsᴀɢᴇ:\n/prefix <ᴘʀᴇꜰɪx>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/prefix @BhookiBhabhi"
+            "<b>⚙️ ᴜsᴀɢᴇ:\n/prefix <ᴘʀᴇꜰɪx>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/prefix @BhookiBhabhi</b>"
         )
 
     prefix = args[1].strip()
-    user_id = message.from_user.id
-    USER_PREFIXES[user_id] = prefix
+    await database.set_user_prefix(userid, prefix)
+    await send_message(message, f"<b>✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}</b>")
 
-    await send_message(
-        message,
-        f"✅ ᴘʀᴇꜰɪx sᴇᴛ ᴛᴏ: {prefix}\n"
-        f"⚡ ɴᴏᴡ ʏᴏᴜ ᴄᴀɴ ᴜsᴇ /rename ᴡɪᴛʜᴏᴜᴛ ᴛʏᴘɪɴɢ ɪᴛ."
-    )
-
-
+# ─────────────────────────────
+# /rename — Rename files in Mega
+# ─────────────────────────────
 async def rename_mega_command(client, message):
     try:
         args = message.text.split(maxsplit=3)
         if len(args) < 3:
             return await send_message(
                 message,
-                "⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password> [prefix]\n\n"
-                "📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass RenamedFile"
+                "<b>⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
             )
 
         email, password = args[1], args[2]
-
-        # Use either command argument or saved user prefix
         user_id = message.from_user.id
-        rename_prefix = None
-        if len(args) > 3:
-            rename_prefix = args[3]
-        elif user_id in USER_PREFIXES:
-            rename_prefix = USER_PREFIXES[user_id]
+        rename_prefix = await database.get_user_prefix(user_id)
+        rename_folders = await database.get_user_folder_state(user_id)
+        swap_mode = await database.get_user_swap_state(user_id)
 
-        msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ ᴀᴄᴄᴏᴜɴᴛ...</b>")
+        msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
 
         start_time = time.time()
-
-        # Create isolated Mega session per user
         async_api = AsyncMega()
-        async_api.api = api = MegaApi(None, None, None, "PRO_ERROR_RENAME")
+        async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
         try:
             await async_api.login(email, password)
-            await msg.edit_text("<b>✅ ʟᴏɢɢᴇᴅ ɪɴ sᴜᴄᴄᴇssꜰᴜʟʟʏ.\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
+            await msg.edit_text("<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
         except Exception as e:
-            return await msg.edit_text(f"<b>❌ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:\n{e}</b>")
+            return await msg.edit_text(f"❌ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ:\n{e}")
 
         root = api.getRootNode()
 
@@ -77,14 +70,20 @@ async def rename_mega_command(client, message):
                 item = children.get(i)
                 name = item.getName()
                 is_folder = item.isFolder()
-                indent = "  " * level
-                results.append(f"{indent}📁 {name}" if is_folder else f"{indent}📄 {name}")
+                results.append(f"{'  '*level}{'📁' if is_folder else '📄'} {name}")
 
-                # Rename files (preserve extension)
-                if rename_prefix and not is_folder:
+                # ─── Rename logic ───
+                if rename_prefix and (not is_folder or rename_folders):
                     counter[0] += 1
-                    base, ext = os.path.splitext(name)
-                    new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
+                    new_name = name
+
+                    if swap_mode:
+                        # 🔁 Swap @username in name
+                        new_name = re.sub(r"@\w+", rename_prefix, name)
+                    else:
+                        base, ext = os.path.splitext(name)
+                        new_name = f"{rename_prefix}_{counter[0]}{ext}" if ext else f"{rename_prefix}_{counter[0]}"
+
                     try:
                         await sync_to_async(api.renameNode, item, new_name)
                         LOGGER.info(f"Renamed: {name} → {new_name}")
@@ -94,30 +93,118 @@ async def rename_mega_command(client, message):
                 if is_folder:
                     sub_results = await traverse_and_rename(item, level + 1, counter)
                     results.extend(sub_results)
+
             return results
 
         results = await traverse_and_rename(root)
-        total_items = len(results)
+        total = len(results)
         time_taken = round(time.time() - start_time, 2)
 
         if not results:
-            await msg.edit_text("⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.")
-        elif not rename_prefix:
-            display = "\n".join(results[:30])
-            more = f"\n\n...ᴀɴᴅ ᴍᴏʀᴇ ({total_items} ᴛᴏᴛᴀʟ)" if total_items > 30 else ""
-            await msg.edit_text(
-                f"✅ ʟᴏɢɪɴ: {email}\n📦 ɪᴛᴇᴍꜱ: {total_items}\n\n{display}{more}"
-            )
+            await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
         else:
             await msg.edit_text(
-                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total_items} ɪᴛᴇᴍꜱ ʀᴇᴄᴜʀꜱɪᴠᴇʟʏ\n"
-                f"🆔 {email}\n"
-                f"🔤 ᴘʀᴇꜰɪx: {rename_prefix}\n"
-                f"⏱️ ᴄᴏᴍᴘʟᴇᴛᴇᴅ ɪɴ {time_taken} sᴇᴄᴏɴᴅꜱ</b>"
+                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n"
+                f"🔤 ᴘʀᴇꜰɪx: {rename_prefix or 'None'}\n"
+                f"📂 ꜰᴏʟᴅᴇʀꜱ: {'✅' if rename_folders else '🚫'}\n"
+                f"🔁 sᴡᴀᴘ ᴍᴏᴅᴇ: {'✅' if swap_mode else '🚫'}\n"
+                f"⏱️ {time_taken}s</b>"
             )
 
         await async_api.logout()
 
     except Exception as e:
-        LOGGER.error(f"Error in rename_mega_command: {e}")
+        LOGGER.error(f"Rename Mega error: {e}")
         await send_message(message, f"❌ ᴇʀʀᴏʀ: {e}")
+
+# ─────────────────────────────
+# /settings — Manage settings
+# ─────────────────────────────
+async def settings_command(_, message):
+    user_id = message.from_user.id
+    prefix = await database.get_user_prefix(user_id) or "None set"
+    rename_folders = await database.get_user_folder_state(user_id)
+    swap_mode = await database.get_user_swap_state(user_id)
+
+    prefix_text = prefix if prefix else "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
+    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪsᴀʙʟᴇᴅ"
+    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪsᴀʙʟᴇᴅ"
+
+    text = (
+        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
+        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
+        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
+        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
+    )
+
+    buttons = ButtonMaker()
+    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
+    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
+    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
+
+    reply_markup = buttons.build_menu(1)
+    await send_message(message, text, reply_markup=reply_markup)
+
+# ─────────────────────────────
+# Callback handler for settings
+# ─────────────────────────────
+async def handle_settings_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+    data = callback_query.data
+
+    if data.startswith("toggle_folder_"):
+        new_state = bool(int(data.split("_")[-1]))
+        await database.set_user_folder_state(user_id, new_state)
+        await callback_query.answer(
+            f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
+            show_alert=True
+        )
+        await refresh_settings_view(callback_query)
+
+    elif data.startswith("toggle_swap_"):
+        new_state = bool(int(data.split("_")[-1]))
+        await database.set_user_swap_state(user_id, new_state)
+        await callback_query.answer(
+            f"🔁 ꜱᴡᴀᴘ ᴍᴏᴅᴇ {'ᴇɴᴀʙʟᴇᴅ' if new_state else 'ᴅɪꜱᴀʙʟᴇᴅ'} ✅",
+            show_alert=True
+        )
+        await refresh_settings_view(callback_query)
+
+    elif data == "refresh_settings":
+        await refresh_settings_view(callback_query)
+
+# ─────────────────────────────
+# Refresh message content
+# ─────────────────────────────
+async def refresh_settings_view(q):
+    user_id = q.from_user.id
+    prefix = await database.get_user_prefix(user_id)
+    rename_folders = await database.get_user_folder_state(user_id)
+    swap_mode = await database.get_user_swap_state(user_id)
+
+    prefix_text = prefix if prefix else "❌ ɴᴏ ᴘʀᴇꜰɪx sᴇᴛ"
+    folder_state = "✅ ᴇɴᴀʙʟᴇᴅ" if rename_folders else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
+    swap_state = "✅ ᴇɴᴀʙʟᴇᴅ" if swap_mode else "🚫 ᴅɪꜱᴀʙʟᴇᴅ"
+
+    text = (
+        f"<b>⚙️ ᴜꜱᴇʀ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        f"🔤 ᴘʀᴇꜰɪx: {prefix_text}\n"
+        f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {folder_state}\n"
+        f"🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ: {swap_state}\n\n"
+        f"ᴛᴀᴘ ᴛᴏ ᴛᴏɢɢʟᴇ ᴏᴘᴛɪᴏɴꜱ ↓</b>"
+    )
+
+    buttons = ButtonMaker()
+    buttons.data_button("📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ", f"toggle_folder_{int(not rename_folders)}")
+    buttons.data_button("🔁 ɴᴀᴍᴇ ꜱᴡᴀᴘ", f"toggle_swap_{int(not swap_mode)}")
+    buttons.data_button("🔄 ʀᴇꜰʀᴇꜱʜ", "refresh_settings")
+
+    reply_markup = buttons.build_menu(1)
+    await edit_message(q.message, text, reply_markup=reply_markup)
+
+# ─────────────────────────────
+# Register handlers
+# ─────────────────────────────
+def register_handlers(TgClient):
+    TgClient.add_handler(CallbackQueryHandler(handle_settings_callback, filters.regex(r"^(toggle_folder_|toggle_swap_|refresh_settings)")))
