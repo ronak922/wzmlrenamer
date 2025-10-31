@@ -70,7 +70,8 @@ async def rename_mega_command(client, message):
                 item = children.get(i)
                 name = item.getName()
                 is_folder = item.isFolder()
-                results.append(f"{'  '*level}{'📁' if is_folder else '📄'} {name}")
+                icon = "📁" if is_folder else "📄"
+                results.append(f"{'  ' * level}<blockquote expandable>{icon} {name}</blockquote>")
 
                 # ─── Rename logic ───
                 if rename_prefix and (not is_folder or rename_folders):
