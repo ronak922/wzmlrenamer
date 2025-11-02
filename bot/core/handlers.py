@@ -47,6 +47,12 @@ def add_handlers():
         )
     )
 
+    TgClient.bot.add_handler(
+        MessageHandler(
+            addpaid_command,
+            filters=command("addpaid", case_sensitive=True)
+        )
+    )
     # TgClient.bot.add_handler(
     #     MessageHandler(
     #         rename_status,

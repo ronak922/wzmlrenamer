@@ -13,6 +13,7 @@ import os, time, re, random, asyncio
 import time as t
 from ....helper.telegram_helper.message_utils import *
 import gc
+from config import OWNER_ID
 
 # ─────────────────────────────
 # /prefix — Save user prefix
@@ -33,7 +34,7 @@ async def prefix_command(_, message):
 
 
 # ─────────────────────────────
-# /rename — Rename files in Mega (stable + error logging)
+# /rename — Rename files in Mega (premium-aware + failure count)
 # ─────────────────────────────
 async def rename_mega_command(client, message):
     try:
@@ -41,41 +42,37 @@ async def rename_mega_command(client, message):
         if len(args) < 3:
             return await send_message(
                 message,
-                "<b>⚙️ ᴜsᴀɢᴇ:\n/rename <email> <password>\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
+                "<b>⚙️ ᴜsᴀɢᴇ:\n/rename &lt;email&gt; &lt;password&gt;\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
             )
 
         email, password = args[1], args[2]
         user_id = message.from_user.id
 
+        # ─── USER CONFIG ───
         rename_prefix = await database.get_user_prefix(user_id)
         rename_folders = await database.get_user_folder_state(user_id)
         swap_mode = await database.get_user_swap_state(user_id)
+        is_premium = await database.is_user_premium(user_id)  # ✅ Check premium status
 
         msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
-        start_time = t.time()  # ✅ safe alias
+        start_time = t.time()
 
         async_api = AsyncMega()
         async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
-        # ─── LOGIN HANDLING ───
+        # ─── LOGIN ───
         try:
             await async_api.login(email, password)
             await msg.edit_text("<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
         except Exception as e:
             err = str(e).lower()
             LOGGER.error(f"❌ ᴍᴇɢᴀ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {email}: {e}")
-
-            # best-effort logout & cleanup before returning
-            try:
-                await async_api.logout()
-            except Exception:
-                pass
-            try:
-                del async_api.api
-            except Exception:
-                pass
+            try: await async_api.logout()
+            except Exception: pass
+            try: del async_api.api
+            except Exception: pass
             gc.collect()
 
             if "credentials" in err or "eaccess" in err:
@@ -89,32 +86,36 @@ async def rename_mega_command(client, message):
 
         # ─── RENAME PROCESS ───
         root = api.getRootNode()
+        limit = 999999999 if is_premium else 50  # ✅ Premium unlimited, free limited
+        failed = 0
 
         async def traverse_and_rename(node, level=0, counter=[0]):
+            nonlocal failed
+            if counter[0] >= limit:
+                return []
+
             children = api.getChildren(node)
             if not children or children.size() == 0:
                 return []
 
             results = []
             for i in range(children.size()):
+                if counter[0] >= limit:
+                    break
+
                 item = children.get(i)
                 try:
                     name = item.getName()
-                except Exception:
-                    name = "unknown"
-                try:
                     is_folder = item.isFolder()
                 except Exception:
-                    is_folder = False
+                    continue
 
                 icon = "📁" if is_folder else "📄"
                 results.append(f"{'  ' * level}<b><blockquote expandable>{icon} {name}</blockquote></b>")
 
-                # ─── RENAME LOGIC ───
                 if rename_prefix and (not is_folder or rename_folders):
                     counter[0] += 1
                     new_name = name
-
                     if swap_mode:
                         try:
                             new_name = re.sub(r"@\w+", rename_prefix, name)
@@ -127,6 +128,7 @@ async def rename_mega_command(client, message):
                     try:
                         await sync_to_async(api.renameNode, item, new_name)
                     except Exception as e:
+                        failed += 1
                         LOGGER.error(f"❌ Rename failed for {name}: {e}")
 
                 if is_folder:
@@ -137,54 +139,33 @@ async def rename_mega_command(client, message):
 
         results = await traverse_and_rename(root)
         total = len(results)
-        time_taken = round(t.time() - start_time, 2)  # ✅ use alias safely
+        time_taken = round(t.time() - start_time, 2)
 
         # ─── RESULT ───
         if not results:
             await msg.edit_text("<b>⚠️ ɴᴏ ꜰɪʟᴇꜱ ᴏʀ ꜰᴏʟᴅᴇʀꜱ ꜰᴏᴜɴᴅ.</b>")
         else:
+            limit_text = "∞ (ᴘʀᴇᴍɪᴜᴍ)" if is_premium else "50 (ꜰʀᴇᴇ ʟɪᴍɪᴛ)"
             await msg.edit_text(
-                f"<b>✅ ʀᴇɴᴀᴍᴇᴅ {total} ɪᴛᴇᴍꜱ\n\n"
-                f"🔤 ᴘʀᴇꜰɪx: <code>{rename_prefix or 'ɴᴏɴᴇ'}</code>\n"
-                f"📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if rename_folders else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
-                f"🔁 sᴡᴀᴘ ᴍᴏᴅᴇ: {'✅ ᴇɴᴀʙʟᴇᴅ' if swap_mode else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
-                f"⏱️ {time_taken}s</b>"
+                f"<b>✅ ʀᴇɴᴀᴍᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ\n\n"
+                # f"📦 ᴜꜱᴇʀ ᴛʏᴘᴇ:</b> {'<code>Premium 🟢</code>' if is_premium else '<code>Free 🔴</code>'}\n"
+                f"<b>🔢 ᴛᴏᴛᴀʟ ɪᴛᴇᴍꜱ:</b> <code>{min(total, limit)}</code>\n"
+                f"<b>⚠️ ꜰᴀɪʟᴇᴅ ɪᴛᴇᴍꜱ:</b> <code>{failed}</code>\n"
+                f"<b>🔤 ᴘʀᴇꜰɪx:</b> <code>{rename_prefix or 'ɴᴏɴᴇ'}</code>\n"
+                f"<b>📂 ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'✅ ᴇɴᴀʙʟᴇᴅ' if rename_folders else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
+                f"<b>🔁 sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'✅ ᴇɴᴀʙʟᴇᴅ' if swap_mode else '🚫 ᴅɪsᴀʙʟᴇᴅ'}\n"
+                # f"<b>📈 ʟɪᴍɪᴛ:</b> <code>{limit_text}</code>\n"
+                f"<b>⏱️ ᴛɪᴍᴇ:</b> <code>{time_taken}s</code></b>"
             )
 
-        # ─────────────────────────────────────────────
-        # important cleanup to avoid MEGA sdk segfaults
-        # ─────────────────────────────────────────────
-        try:
-            await async_api.logout()
-        except Exception:
-            # ignore logout errors but attempt further cleanup
-            pass
-
-        # small pause to let MEGA threads finish cleanup
-        try:
-            await asyncio.sleep(0.3)
-        except Exception:
-            pass
-
-        # remove references and force GC (helps avoid C-extension destructor races)
-        try:
-            # If MegaApi exposes removeListener, attempt to remove (best-effort)
-            try:
-                api.removeListener(mega_listener)
-            except Exception:
-                pass
-        except Exception:
-            pass
-
-        try:
-            del async_api
-        except Exception:
-            pass
-        try:
-            del api
-        except Exception:
-            pass
-
+        # ─── CLEANUP ───
+        try: await async_api.logout()
+        except Exception: pass
+        await asyncio.sleep(0.3)
+        try: api.removeListener(mega_listener)
+        except Exception: pass
+        try: del async_api, api
+        except Exception: pass
         gc.collect()
 
     except Exception as e:
@@ -273,6 +254,42 @@ async def cb_refresh_settings(client, q):
     await edit_message(q.message, "<b>🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ ᴜsᴇʀ ꜱᴇᴛᴛɪɴɢꜱ...</b>")
     await q.answer("🔄 ʀᴇꜰʀᴇꜱʜɪɴɢ...", show_alert=False)
     await send_settings_view(client, q.message, q.from_user.id, edit=True)
+
+# ─────────────────────────────
+# /addpaid — Grant premium access for days
+# ─────────────────────────────
+# @Client.on_message(filters.command("addpaid"))
+async def addpaid_command(_, message):
+    if message.from_user.id != OWNER_ID:
+        return await send_message(message, "🚫 <b>ᴀᴄᴄᴇss ᴅᴇɴɪᴇᴅ.</b>")
+
+    args = message.text.split(maxsplit=3)
+    if len(args) < 2:
+        return await send_message(
+            message,
+            "<b>⚙️ ᴜsᴀɢᴇ:</b>\n"
+            "/addpaid <user_id> [days|0]\n\n"
+            "<b>📘 ᴇxᴀᴍᴘʟᴇs:</b>\n"
+            "/addpaid 12345 30 → 30 ᴅᴀʏꜱ\n"
+            "/addpaid 12345 0 → ʀᴇᴍᴏᴠᴇ ᴘʀᴇᴍɪᴜᴍ"
+        )
+
+    try:
+        user_id = int(args[1])
+        days = int(args[2]) if len(args) > 2 else 0
+
+        if days <= 0:
+            await database.remove_user_premium(user_id)
+            msg = f"❌ ᴜsᴇʀ <code>{user_id}</code> ᴘʀᴇᴍɪᴜᴍ ʀᴇᴠᴏᴋᴇᴅ"
+        else:
+            await database.set_user_premium(user_id, days)
+            msg = f"💎 ᴜsᴇʀ <code>{user_id}</code> ᴘʀᴇᴍɪᴜᴍ ᴀᴅᴅᴇᴅ ꜰᴏʀ {days} ᴅᴀʏꜱ"
+
+        await send_message(message, msg)
+
+    except Exception as e:
+        await send_message(message, f"❌ ᴇʀʀᴏʀ:\n<code>{e}</code>")
+
 
 
 # ─────────────────────────────

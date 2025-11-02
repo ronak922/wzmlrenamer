@@ -5,7 +5,7 @@ from aiofiles.os import path as aiopath
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.errors import PyMongoError
 from pymongo.server_api import ServerApi
-
+from datetime import datetime, timedelta
 from ... import LOGGER, qbit_options, rss_dict, user_data
 from ...core.config_manager import Config
 from ...core.tg_client import TgClient
@@ -258,5 +258,59 @@ class DbManager:
         doc = await self.db.swap_state.find_one({"_id": user_id})
         return doc.get("swap_mode", False) if doc else False
 
+
+    # ─────────────────────────────
+    # 💎 Premium System
+    # ─────────────────────────────
+    async def set_user_premium(self, user_id: int, days: int):
+        """Add or extend premium for a user."""
+        if self._return:
+            return
+        expiry = datetime.utcnow() + timedelta(days=days)
+        await self.db.premium.update_one(
+            {"_id": user_id},
+            {"$set": {"is_premium": True, "expiry": expiry.timestamp()}},
+            upsert=True,
+        )
+
+    async def remove_user_premium(self, user_id: int):
+        """Remove premium status."""
+        if self._return:
+            return
+        await self.db.premium.update_one(
+            {"_id": user_id},
+            {"$set": {"is_premium": False, "expiry": None}},
+            upsert=True,
+        )
+
+    async def is_user_premium(self, user_id: int) -> bool:
+        """Check if user is currently premium."""
+        if self._return:
+            return False
+        doc = await self.db.premium.find_one({"_id": user_id})
+        if not doc or not doc.get("is_premium"):
+            return False
+
+        expiry = doc.get("expiry")
+        if not expiry:
+            return False
+
+        now = datetime.utcnow().timestamp()
+        if now > expiry:
+            # Expired → revoke premium
+            await self.remove_user_premium(user_id)
+            return False
+
+        return True
+
+    async def get_premium_info(self, user_id: int) -> str:
+        """Return formatted premium info (for debugging or admin view)."""
+        if self._return:
+            return "❌ DB not connected"
+        doc = await self.db.premium.find_one({"_id": user_id})
+        if not doc or not doc.get("is_premium"):
+            return f"🆓 User <code>{user_id}</code> is not premium."
+        expiry_dt = datetime.utcfromtimestamp(doc['expiry'])
+        return f"💎 User <code>{user_id}</code> is premium until <b>{expiry_dt:%d-%b-%Y %H:%M UTC}</b>"
 
 database = DbManager()
