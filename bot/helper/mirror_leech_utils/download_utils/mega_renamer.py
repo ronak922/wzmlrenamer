@@ -13,6 +13,7 @@ import os, time, re, random, asyncio
 import time as t
 from ....helper.telegram_helper.message_utils import *
 import gc
+from datetime import datetime, timedelta
 from config import OWNER_ID
 
 # ─────────────────────────────
@@ -34,7 +35,7 @@ async def prefix_command(_, message):
 
 
 # ─────────────────────────────
-# /rename — Rename files in Mega (premium-aware + failure count)
+# /rename — Mega Rename Command
 # ─────────────────────────────
 async def rename_mega_command(client, message):
     try:
@@ -42,7 +43,7 @@ async def rename_mega_command(client, message):
         if len(args) < 3:
             return await send_message(
                 message,
-                "<b>⚙️ ᴜsᴀɢᴇ:\n/rename &lt;email&gt; &lt;password&gt;\n\n📘 ᴇxᴀᴍᴘʟᴇ:\n/rename test@gmail.com mypass</b>"
+                "<b>⚙️ ᴜsᴀɢᴇ:</b>\n/rename &lt;email&gt; &lt;password&gt;\n\n<b>📘 ᴇxᴀᴍᴘʟᴇ:</b>\n/rename test@gmail.com mypass"
             )
 
         email, password = args[1], args[2]
@@ -54,9 +55,16 @@ async def rename_mega_command(client, message):
         swap_mode = await database.get_user_swap_state(user_id)
         is_premium = await database.is_user_premium(user_id)  # ✅ Check premium status
 
-        msg = await send_message(message, "<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>")
+        # ─── LOGIN STATUS ───
+        user_type_text = "💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴜsᴇʀ</b>" if is_premium else "🆓 <b>ꜰʀᴇᴇ ᴜsᴇʀ</b>"
+        msg = await send_message(
+            message,
+            f"<b>🔐 ʟᴏɢɪɴɢ ɪɴᴛᴏ ᴍᴇɢᴀ...</b>\n\n{user_type_text}"
+        )
+
         start_time = t.time()
 
+        # ─── INIT ───
         async_api = AsyncMega()
         async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
         mega_listener = MegaAppListener(async_api.continue_event, None)
@@ -65,7 +73,9 @@ async def rename_mega_command(client, message):
         # ─── LOGIN ───
         try:
             await async_api.login(email, password)
-            await msg.edit_text("<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...</b>")
+            await msg.edit_text(
+                f"<b>✅ ʟᴏɢɪɴ sᴜᴄᴄᴇssꜰᴜʟ</b>\n📂 ꜰᴇᴛᴄʜɪɴɢ ꜱᴛʀᴜᴄᴛᴜʀᴇ...\n\n{user_type_text}"
+            )
         except Exception as e:
             err = str(e).lower()
             LOGGER.error(f"❌ ᴍᴇɢᴀ ʟᴏɢɪɴ ꜰᴀɪʟᴇᴅ ꜰᴏʀ {email}: {e}")
@@ -157,6 +167,12 @@ async def rename_mega_command(client, message):
                 # f"<b>📈 ʟɪᴍɪᴛ:</b> <code>{limit_text}</code>\n"
                 f"<b>⏱️ ᴛɪᴍᴇ:</b> <code>{time_taken}s</code></b>"
             )
+                # ─── UPDATE USER RENAME COUNT ───
+        try:
+            renamed_now = min(total, limit)
+            await database.increment_user_rename_count(user_id, renamed_now)
+        except Exception as err:LOGGER.warning(f"⚠️ Failed to update rename count for {user_id}: {err}")
+
 
         # ─── CLEANUP ───
         try: await async_api.logout()
@@ -289,6 +305,57 @@ async def addpaid_command(_, message):
 
     except Exception as e:
         await send_message(message, f"❌ ᴇʀʀᴏʀ:\n<code>{e}</code>")
+
+# ─────────────────────────────
+# /status — Show user rename stats
+# ─────────────────────────────
+async def status_command(client, message):
+    try:
+        args = message.text.split(maxsplit=1)
+        sender_id = message.from_user.id
+
+        # ─── DETERMINE TARGET USER ───
+        if len(args) > 1:
+            # Only OWNER or ADMINS can view others' stats
+            if sender_id != OWNER_ID:
+                return await message.reply_text("<b>❌ ᴀᴅᴍɪɴ ᴏɴʟʏ..!</b>")
+
+            # Try to parse ID or username
+            try:
+                target = args[1].strip()
+                if target.startswith("@"):
+                    user = await client.get_users(target)
+                    user_id = user.id
+                else:
+                    user_id = int(target)
+            except Exception:
+                return await message.reply_text("⚠️ Invalid user ID or username.")
+        else:
+            user_id = sender_id  # Default: self
+
+        # ─── FETCH USER INFO ───
+        is_premium = await database.is_user_premium(user_id)
+        premium_text = "💎 <b>ᴘʀᴇᴍɪᴜᴍ ᴜsᴇʀ</b>" if is_premium else "🆓 <b>ꜰʀᴇᴇ ᴜsᴇʀ</b>"
+        rename_count = await database.get_user_rename_count(user_id)
+
+        expiry_info = ""
+        if is_premium:
+            doc = await database.db.premium.find_one({"_id": user_id})
+            if doc and doc.get("expiry"):
+                expiry_dt = datetime.utcfromtimestamp(doc["expiry"])
+                expiry_info = f"\n⏳ ᴇxᴘɪʀᴇs ᴏɴ: <b>{expiry_dt:%d-%b-%Y %H:%M UTC}</b>"
+
+        # ─── MESSAGE FORMAT ───
+        text = (
+            f"👤 <b>ᴜꜱᴇʀ ɪᴅ:</b> <code>{user_id}</code>\n"
+            f"{premium_text}{expiry_info}\n\n"
+            f"📦 <b>ꜰɪʟᴇꜱ ʀᴇɴᴀᴍᴇᴅ:</b> <code>{rename_count}</code>"
+        )
+
+        await message.reply_text(text, quote=True)
+
+    except Exception as e:
+        await message.reply_text(f"❌ ᴇʀʀᴏʀ:\n<code>{e}</code>")
 
 
 

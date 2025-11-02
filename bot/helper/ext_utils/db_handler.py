@@ -313,4 +313,40 @@ class DbManager:
         expiry_dt = datetime.utcfromtimestamp(doc['expiry'])
         return f"💎 User <code>{user_id}</code> is premium until <b>{expiry_dt:%d-%b-%Y %H:%M UTC}</b>"
 
+    # ─────────────────────────────
+    # 📂 Rename Count System
+    # ─────────────────────────────
+    async def increment_user_rename_count(self, user_id: int, value: int = 1):
+        """Increase a user's total renamed file count."""
+        if self._return:
+            return
+        await self.db.rename_stats.update_one(
+            {"_id": user_id},
+            {"$inc": {"count": value}},
+            upsert=True
+        )
+
+    async def get_user_rename_count(self, user_id: int) -> int:
+        """Return total renamed files by a user."""
+        if self._return:
+            return 0
+        doc = await self.db.rename_stats.find_one({"_id": user_id})
+        return doc.get("count", 0) if doc else 0
+
+    async def reset_user_rename_count(self, user_id: int):
+        """Reset rename counter for a user."""
+        if self._return:
+            return
+        await self.db.rename_stats.update_one(
+            {"_id": user_id}, {"$set": {"count": 0}}, upsert=True
+        )
+
+    async def get_all_rename_stats(self):
+        """Return list of (user_id, count) for all users."""
+        if self._return:
+            return []
+        cursor = self.db.rename_stats.find({})
+        return [(doc["_id"], doc.get("count", 0)) async for doc in cursor]
+
+
 database = DbManager()

@@ -53,13 +53,12 @@ def add_handlers():
             filters=command("addpaid", case_sensitive=True)
         )
     )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         rename_status,
-    #         filters=command("status", case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            status_command,
+            filters=command("status", case_sensitive=True)
+        )
+    )
 
 
     TgClient.bot.add_handler(
