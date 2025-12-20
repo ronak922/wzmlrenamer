@@ -39,6 +39,11 @@ from .... import LOGGER
 from ....helper.telegram_helper.message_utils import send_message
 from ....helper.ext_utils.db_handler import database
 
+import asyncio
+import os
+import re
+import time as t
+
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
@@ -115,17 +120,34 @@ async def rename_mega_command(_, message):
                     new_name = re.sub(r"@\w+", prefix, name)
 
                 new_path = os.path.join(os.path.dirname(path), new_name)
+
+                # Check if the file already exists with the new name
+                check_proc = await asyncio.create_subprocess_shell(
+                    f"mega-find \"{os.path.dirname(path)}\" | grep -qxF \"{new_name}\"",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                check_out, check_err = await check_proc.communicate()
+
+                if check_proc.returncode == 0:
+                    # File with the new name exists, skip renaming or append suffix
+                    new_name = f"{prefix}_{i}_duplicate{os.path.splitext(name)[1]}"
+                    new_path = os.path.join(os.path.dirname(path), new_name)
+
+                # Now proceed with renaming
                 proc = await asyncio.create_subprocess_shell(
                     f'mega-mv "{path}" "{new_path}" 2>/dev/null',
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
-                _, err = await proc.communicate()
-                if err:
+                out, err = await proc.communicate()
+
+                if proc.returncode != 0:
                     failed += 1
-                    LOGGER.warning(f"Mega rename failed: {path} → {new_name} | {err.decode()}")
+                    LOGGER.warning(f"Mega rename failed: {path} → {new_name} | Error: {err.decode() if err else 'No error message'}")
                 else:
                     renamed += 1
+                    LOGGER.info(f"Renamed: {path} → {new_name}")
 
         tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
         await asyncio.gather(*tasks)
@@ -154,6 +176,7 @@ async def rename_mega_command(_, message):
         f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ᴏɴ' if swap_mode else 'ᴏғғ'}\n"
         f"⏱ <b>ᴛɪᴍᴇ:</b> <code>{elapsed}s</code>"
     )
+
 
 # ─────────────────────────────
 # /settings
