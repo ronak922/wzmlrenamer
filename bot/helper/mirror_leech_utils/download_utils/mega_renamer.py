@@ -154,18 +154,19 @@ async def rename_mega_command(_, message: Message):
     # LIST FILES (HANDLE MODE)
     out, err, _ = await run_mega_cmd(["mega-ls", "-R", "--show-handles"], timeout=180)
 
+    # --- FIXED PARSING ---
     entries = []
     for line in out.splitlines():
         line = line.strip()
         if not line or "exceeded your available storage" in line.lower():
             continue
-        parts = line.split(maxsplit=1)
-        if len(parts) != 2:
+
+        match = re.match(r"^(.*)\s+<H:([A-Za-z0-9]+)>$", line)
+        if not match:
             continue
-        handle, name = parts
-        if not handle.startswith("H:") and not handle.endswith("h"):
-            continue
-        name = name.lstrip("* ").strip()
+
+        name = match.group(1).strip()
+        handle = match.group(2).strip()
         entries.append((handle, name))
 
     if not entries:
@@ -228,6 +229,7 @@ async def rename_mega_command(_, message: Message):
         f"🔁 Swap mode: {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ Time: <code>{round(t.time() - start_time, 2)}s</code>"
     )
+
 
 # ─────────────────────────────
 # Register CALLBACK HANDLERS
