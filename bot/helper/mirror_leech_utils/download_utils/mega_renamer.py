@@ -1,6 +1,6 @@
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardMarkup
-from pyrogram.handlers import CallbackQueryHandler
+from pyrogram.types import InlineKeyboardMarkup, Message
+from pyrogram.handlers import CallbackQueryHandler, MessageHandler
 
 from .... import LOGGER
 from ...telegram_helper.message_utils import send_message
@@ -16,7 +16,7 @@ from config import OWNER_ID
 # ─────────────────────────────
 # /prefix
 # ─────────────────────────────
-async def prefix_command(_, message):
+async def prefix_command(_, message: Message):
     args = message.text.split(maxsplit=1)
     if len(args) < 2:
         return await send_message(
@@ -28,85 +28,115 @@ async def prefix_command(_, message):
 
 
 # ─────────────────────────────
-# /rename — MegaCMD Rename (Safe)
+# /rename — MegaCMD Rename
 # ─────────────────────────────
-import os, re, gc, time as t
-from ....helper.ext_utils.db_handler import database
-from .... import LOGGER
-from ...ext_utils.bot_utils import cmd_exec
+async def rename_mega_command(_, message: Message):
+    args = message.text.split(maxsplit=3)
+    if len(args) < 3:
+        return await send_message(
+            message,
+            "<b>⚙️ Usage:</b>\n/rename <email> <password>"
+        )
 
-async def rename_mega_command(client, message, email, password, rename_prefix, rename_folders, swap_mode, is_premium):
-    msg = await message.reply("<b>🔐 Logging into Mega...</b>")
-    start_time = t.time()
+    email, password = args[1], args[2]
     user_id = message.from_user.id
 
-    # ─── LOGIN ───
-    _, err, code = await cmd_exec(["mega-login", email, password])
-    if code != 0:
-        return await msg.edit_text(f"❌ Login failed:\n<code>{err}</code>")
+    prefix = await database.get_user_prefix(user_id)
+    rename_folders = await database.get_user_folder_state(user_id)
+    swap_mode = await database.get_user_swap_state(user_id)
+    is_premium = await database.is_user_premium(user_id)
 
-    await msg.edit_text("<b>📂 Fetching files...</b>")
-
-    # ─── LIST ALL FILES RECURSIVELY ───
-    out, err, code = await cmd_exec(["mega-ls", "-R"])
-    if code != 0:
-        await cmd_exec(["mega-logout"])
-        return await msg.edit_text(f"❌ Mega error:\n<code>{err}</code>")
-
-    paths = [p.strip() for p in out.splitlines() if p.strip()]
+    if not prefix:
+        return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
     limit = 10**9 if is_premium else 50
-    renamed = 0
-    failed = 0
+    renamed = failed = 0
 
-    for path in paths:
-        if renamed >= limit:
-            break
+    msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
+    start_time = t.time()
 
-        name = os.path.basename(path)
-        is_folder = "." not in name
-
-        if is_folder and not rename_folders:
-            continue
-
-        renamed += 1
-        if swap_mode:
-            try:
-                new_name = re.sub(r"@\w+", rename_prefix, name)
-            except Exception:
-                new_name = f"{rename_prefix}_{renamed}"
-        else:
-            base, ext = os.path.splitext(name)
-            new_name = f"{rename_prefix}_{renamed}{ext}"
-
-        new_path = os.path.join(os.path.dirname(path), new_name)
-
-        _, err, code = await cmd_exec(["mega-mv", path, new_path])
+    try:
+        # ─── LOGIN WITH TIMEOUT ───
+        try:
+            _, err, code = await asyncio.wait_for(cmd_exec(["mega-login", email, password]), timeout=30)
+        except asyncio.TimeoutError:
+            return await msg.edit_text("⏳ Mega login timed out. Check network or 2FA.")
+        
         if code != 0:
-            failed += 1
-            LOGGER.error(f"Mega rename failed: {path} → {new_name} | {err}")
+            return await msg.edit_text(f"❌ Login failed:\n<code>{err}</code>")
 
-    # ─── LOGOUT ───
-    await cmd_exec(["mega-logout"])
-    gc.collect()
+        await msg.edit_text("<b>📂 Fetching files...</b>")
 
-    # ─── UPDATE USER RENAME COUNT ───
+        # ─── LIST FILES WITH TIMEOUT ───
+        try:
+            out, err, code = await asyncio.wait_for(cmd_exec(["mega-ls", "-R"]), timeout=60)
+        except asyncio.TimeoutError:
+            await cmd_exec(["mega-logout"])
+            return await msg.edit_text("⏳ Mega file listing timed out.")
+
+        if code != 0:
+            await cmd_exec(["mega-logout"])
+            return await msg.edit_text(f"❌ Mega error:\n<code>{err}</code>")
+
+        paths = [p.strip() for p in out.splitlines() if p.strip()]
+
+        # ─── RENAME LOOP ───
+        for path in paths:
+            if renamed >= limit:
+                break
+
+            name = os.path.basename(path)
+            is_folder = "." not in name
+
+            if is_folder and not rename_folders:
+                continue
+
+            renamed += 1
+
+            if swap_mode:
+                try:
+                    new_name = re.sub(r"@\w+", prefix, name)
+                except Exception:
+                    new_name = f"{prefix}_{renamed}"
+            else:
+                base, ext = os.path.splitext(name)
+                new_name = f"{prefix}_{renamed}{ext}"
+
+            new_path = os.path.join(os.path.dirname(path), new_name)
+
+            try:
+                _, err, code = await asyncio.wait_for(cmd_exec(["mega-mv", path, new_path]), timeout=20)
+            except asyncio.TimeoutError:
+                failed += 1
+                LOGGER.error(f"Mega rename timeout: {path} → {new_name}")
+                continue
+
+            if code != 0:
+                failed += 1
+                LOGGER.error(f"Mega rename failed: {path} → {new_name} | {err}")
+
+    finally:
+        # ─── LOGOUT & CLEANUP ───
+        try: await asyncio.wait_for(cmd_exec(["mega-logout"]), timeout=10)
+        except Exception: pass
+        gc.collect()
+
+    # ─── UPDATE DATABASE ───
     try:
         await database.increment_user_rename_count(user_id, renamed)
     except Exception as e:
-        LOGGER.warning(f"⚠️ Failed to update rename count for {user_id}: {e}")
+        LOGGER.warning(f"Rename count update failed: {e}")
 
-    # ─── RESULT ───
+    # ─── FINAL MESSAGE ───
     await msg.edit_text(
         f"<b>✅ Rename Completed</b>\n\n"
-        f"🔢 Renamed: <code>{renamed}</code>\n"
-        f"⚠️ Failed: <code>{failed}</code>\n"
-        f"🔤 Prefix: <code>{rename_prefix}</code>\n"
-        f"📂 Folder rename: {'ON' if rename_folders else 'OFF'}\n"
-        f"🔁 Swap mode: {'ON' if swap_mode else 'OFF'}\n"
-        f"⏱ Time: <code>{round(t.time() - start_time, 2)}s</code>"
+        f"🔢 <b>Renamed:</b> <code>{renamed}</code>\n"
+        f"⚠️ <b>Failed:</b> <code>{failed}</code>\n"
+        f"🔤 <b>Prefix:</b> <code>{prefix}</code>\n"
+        f"📂 <b>Folder rename:</b> {'ON' if rename_folders else 'OFF'}\n"
+        f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
+        f"⏱ <b>Time:</b> <code>{round(t.time() - start_time, 2)}s</code>"
     )
-
 
 
 # ─────────────────────────────
