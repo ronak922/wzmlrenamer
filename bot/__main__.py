@@ -26,7 +26,7 @@ async def main():
         update_variables,
     )
 
-    await load_settings()
+    # await load_settings()
 
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
