@@ -97,13 +97,13 @@ def add_handlers():
             & CustomFilters.sudo,
         )
     )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         send_bot_settings,
-    #         filters=command(BotCommands.BotSetCommand, case_sensitive=True)
-    #         & CustomFilters.sudo,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            send_bot_settings,
+            filters=command(BotCommands.BotSetCommand, case_sensitive=True)
+            & CustomFilters.sudo,
+        )
+    )
     TgClient.bot.add_handler(
         MessageHandler(
             broadcast,
@@ -111,25 +111,25 @@ def add_handlers():
             & CustomFilters.sudo,
         )
     )
-    # TgClient.bot.add_handler(
-    #     CallbackQueryHandler(
-    #         edit_bot_settings, filters=regex("^botset") & CustomFilters.sudo
-    #     )
-    # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         cancel,
-    #         filters=regex(rf"^/{BotCommands.CancelTaskCommand[1]}?(?:_\w+).*$")
-    #         & CustomFilters.authorized,
-    #     )
-    # )
-    # TgClient.bot.add_handler(
-    #     MessageHandler(
-    #         cancel_all_buttons,
-    #         filters=command(BotCommands.CancelAllCommand, case_sensitive=True)
-    #         & CustomFilters.authorized,
-    #     )
-    # )
+    TgClient.bot.add_handler(
+        CallbackQueryHandler(
+            edit_bot_settings, filters=regex("^botset") & CustomFilters.sudo
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            cancel,
+            filters=regex(rf"^/{BotCommands.CancelTaskCommand[1]}?(?:_\w+).*$")
+            & CustomFilters.authorized,
+        )
+    )
+    TgClient.bot.add_handler(
+        MessageHandler(
+            cancel_all_buttons,
+            filters=command(BotCommands.CancelAllCommand, case_sensitive=True)
+            & CustomFilters.authorized,
+        )
+    )
     # TgClient.bot.add_handler(
     #     CallbackQueryHandler(cancel_all_update, filters=regex("^canall"))
     # )

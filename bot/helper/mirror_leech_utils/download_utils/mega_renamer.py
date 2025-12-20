@@ -28,12 +28,13 @@ async def prefix_command(_, message):
     await database.set_user_prefix(message.from_user.id, args[1].strip())
     await send_message(message, f"<b>✅ Prefix set to:</b> <code>{args[1]}</code>")
 
-import asyncio
-import os, time as t, gc
-from .... import LOGGER
-from ...telegram_helper.message_utils import send_message
-from ....helper.ext_utils.db_handler import database
+import time as t
+from mega import Mega
+from config import OWNER_ID
 
+# ─────────────────────────────
+# /rename — MegaCMD Rename (updated)
+# ─────────────────────────────
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
@@ -54,69 +55,65 @@ async def rename_mega_command(_, message):
         return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
     limit = 10**9 if is_premium else 50
+    renamed = failed = 0
 
     msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
     start = t.time()
 
     try:
-        # ─── LOGOUT FIRST ───
-        proc = await asyncio.create_subprocess_shell(
-            "mega-logout",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await proc.communicate()
+        mega = Mega()
+        m = mega.login(email, password)  # non-interactive login
+    except Exception as e:
+        return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{e}</code>")
 
-        # ─── LOGIN ───
-        proc = await asyncio.create_subprocess_shell(
-            f"mega-login {email} {password}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        out, err = await proc.communicate()
-        if proc.returncode != 0:
-            return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{err.decode()}</code>")
+    await msg.edit_text("<b>📂 Fetching files...</b>")
 
-        await msg.edit_text("<b>📂 Renaming files...</b>")
+    try:
+        files = m.get_files()  # fetch all files/folders
+    except Exception as e:
+        m.logout()
+        return await msg.edit_text(f"❌ <b>Failed to fetch files:</b>\n<code>{e}</code>")
 
-        # ─── RENAME USING SHELL LOOP ───
-        loop_cmd = f"""
-i=1
-mega-find / | while read file; do
-    basename=$(basename "$file")
-    dir=$(dirname "$file")
-    ext="${{basename##*.}}"
-    mega-mv "$file" "$dir/{prefix}_$i.$ext"
-    i=$((i+1))
-done
-"""
-        proc = await asyncio.create_subprocess_shell(
-            loop_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            shell=True
-        )
-        out, err = await proc.communicate()
-        if err:
-            LOGGER.warning(err.decode())
+    for file_id, f in files.items():
+        if renamed >= limit:
+            break
 
-    finally:
-        # ─── LOGOUT ───
-        proc = await asyncio.create_subprocess_shell(
-            "mega-logout",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        await proc.communicate()
-        gc.collect()
+        name = f['a']['n']
+        is_folder = f['t'] == 1
 
-    elapsed = round(t.time() - start, 2)
+        if is_folder and not rename_folders:
+            continue
+
+        renamed += 1
+        base, ext = os.path.splitext(name)
+        if swap_mode:
+            new_name = re.sub(r"@\w+", prefix, name) if "@" in name else f"{prefix}_{renamed}{ext}"
+        else:
+            new_name = f"{prefix}_{renamed}{ext}"
+
+        try:
+            m.rename(file_id, new_name)
+        except Exception as e:
+            failed += 1
+            LOGGER.error(f"Mega rename failed: {name} → {new_name} | {e}")
+
+    m.logout()  # always logout
+    gc.collect()
+
+    try:
+        await database.increment_user_rename_count(user_id, renamed)
+    except Exception as e:
+        LOGGER.warning(f"Rename count update failed: {e}")
+
     await msg.edit_text(
-        f"<b>✅ Rename Completed</b>\n"
-        f"⏱ <b>Time:</b> <code>{elapsed}s</code>\n"
-        f"🔤 <b>Prefix:</b> <code>{prefix}</code>"
+        f"<b>✅ Rename Completed</b>\n\n"
+        f"🔢 <b>Renamed:</b> <code>{renamed}</code>\n"
+        f"⚠️ <b>Failed:</b> <code>{failed}</code>\n"
+        f"🔤 <b>Prefix:</b> <code>{prefix}</code>\n"
+        f"📂 <b>Folder rename:</b> {'ON' if rename_folders else 'OFF'}\n"
+        f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
+        f"⏱ <b>Time:</b> <code>{round(t.time() - start, 2)}s</code>"
     )
-
 
 
 
