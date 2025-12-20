@@ -100,7 +100,7 @@ async def rename_mega_command(_, message):
         await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
         # ─── CONCURRENT RENAME ───
-        semaphore = asyncio.Semaphore(100)  # limit concurrency
+        semaphore = asyncio.Semaphore(500)  # limit concurrency
 
         async def rename_path(i, path):
             nonlocal renamed, failed
@@ -150,12 +150,10 @@ async def rename_mega_command(_, message):
         f"🔢 <b>ʀᴇɴᴀᴍᴇᴅ:</b> <code>{renamed}</code>\n"
         f"⚠️ <b>ꜰᴀɪʟᴇᴅ:</b> <code>{failed}</code>\n"
         f"🔤 <b>ᴘʀᴇꜰɪx:</b> <code>{prefix}</code>\n"
-        f"📂 <b>ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'ON' if rename_folders else 'OFF'}\n"
-        f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ON' if swap_mode else 'OFF'}\n"
-        f"⏱ <b>Time:</b> <code>{elapsed}s</code>"
+        f"📂 <b>ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'ᴏɴ' if rename_folders else 'ᴏғғ'}\n"
+        f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ᴏɴ' if swap_mode else 'ᴏғғ'}\n"
+        f"⏱ <b>ᴛɪᴍᴇ:</b> <code>{elapsed}s</code>"
     )
-
-
 
 # ─────────────────────────────
 # /settings
