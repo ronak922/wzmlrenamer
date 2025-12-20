@@ -1,12 +1,10 @@
 # ruff: noqa: E402
 
 from .core.config_manager import Config
-
 Config.load()
 
 from datetime import datetime
 from logging import Formatter
-
 from pytz import timezone
 
 from . import LOGGER, bot_loop
@@ -15,44 +13,41 @@ from .core.tg_client import TgClient
 
 async def main():
     from asyncio import gather
-
     from .core.startup import (
         load_configurations,
         load_settings,
         save_settings,
-        update_aria2_options,
         update_nzb_options,
-        update_qb_options,
         update_variables,
     )
 
+    # Load settings from DB or environment
     await load_settings()
 
+    # Set timezone for logging
     def changetz(*args):
         return datetime.now(timezone(Config.TIMEZONE)).timetuple()
-
     Formatter.converter = changetz
 
+    # Start clients
     await gather(
-        TgClient.start_bot(), TgClient.start_user(), TgClient.start_helper_bots()
+        TgClient.start_bot(),
+        TgClient.start_user(),
+        TgClient.start_helper_bots()
     )
+
+    # Load configurations and update variables
     await gather(load_configurations(), update_variables())
 
-    # from .core.torrent_manager import TorrentManager
-    TorrentManager = None
+    # Only update NZB options, skip all torrents
+    await update_nzb_options()
 
-    await TorrentManager.initiate()
-    await update_nzb_options()  # Only NZB, skip all torrent updates
-
+    # Other startup modules
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph
     from .helper.mirror_leech_utils.rclone_utils.serve import rclone_serve_booter
-    from .modules import (
-        get_packages_version,
-        initiate_search_tools,
-        restart_notification,
-    )
+    from .modules import get_packages_version, initiate_search_tools, restart_notification
 
     await gather(
         save_settings(),
@@ -66,8 +61,10 @@ async def main():
     )
 
 
+# Run main async function
 bot_loop.run_until_complete(main())
 
+# Add handlers
 from .core.handlers import add_handlers
 from .helper.ext_utils.bot_utils import create_help_buttons
 from .helper.listeners.aria2_listener import add_aria2_callbacks
@@ -76,6 +73,7 @@ add_aria2_callbacks()
 create_help_buttons()
 add_handlers()
 
+# Plugin manager
 from .core.plugin_manager import get_plugin_manager
 from .modules.plugin_manager import register_plugin_commands
 
@@ -83,18 +81,12 @@ plugin_manager = get_plugin_manager()
 plugin_manager.bot = TgClient.bot
 register_plugin_commands()
 
+# Restart sessions handler
 from pyrogram.filters import regex
 from pyrogram.handlers import CallbackQueryHandler
-
-from .core.handlers import add_handlers
 from .helper.ext_utils.bot_utils import new_task
 from .helper.telegram_helper.filters import CustomFilters
-from .helper.telegram_helper.message_utils import (
-    delete_message,
-    edit_message,
-    send_message,
-)
-
+from .helper.telegram_helper.message_utils import delete_message, edit_message, send_message
 
 @new_task
 async def restart_sessions_confirm(_, query):
@@ -115,7 +107,6 @@ async def restart_sessions_confirm(_, query):
         await edit_message(restart_message, "Session(s) Restarted Successfully!")
     else:
         await delete_message(message)
-
 
 TgClient.bot.add_handler(
     CallbackQueryHandler(
