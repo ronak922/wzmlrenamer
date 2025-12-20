@@ -186,6 +186,16 @@ from ...ext_utils.bot_utils import cmd_exec
 
 import os, re, asyncio, gc, time as t
 from config import OWNER_ID
+
+async def prefix_command(_, message: Message):
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await send_message(message, "<b>⚙️ Usage:\n/prefix &lt;prefix&gt;</b>")
+
+    prefix = args[1].strip()
+    await database.set_user_prefix(message.from_user.id, prefix)
+    await send_message(message, f"<b>✅ Prefix set:</b> <code>{prefix}</code>")
+
 # ─────────────────────────────
 # /settings
 # ─────────────────────────────
