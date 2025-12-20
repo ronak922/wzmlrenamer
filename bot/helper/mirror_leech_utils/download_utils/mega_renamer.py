@@ -100,7 +100,7 @@ async def rename_mega_command(_, message):
         await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
         # ─── CONCURRENT RENAME ───
-        semaphore = asyncio.Semaphore(500)  # limit concurrency
+        semaphore = asyncio.Semaphore(100)  # limit concurrency
 
         async def rename_path(i, path):
             nonlocal renamed, failed
