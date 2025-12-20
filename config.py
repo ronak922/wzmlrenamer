@@ -1,9 +1,9 @@
 # REQUIRED CONFIG
-BOT_TOKEN = "8530131445:AAHr1RCQ_fyripg0ExyyfAvFjyN9bzyM4AQ"
+BOT_TOKEN = "8323467707:AAEt9NouqcokOH4kiQ79ZZD-AXEN8ukbgL0"
 OWNER_ID = 8349410880
 TELEGRAM_API = 20763817
 TELEGRAM_HASH = "07186e8f2ffe607e99eedf7eaa5e630b"
-DATABASE_URL = "mongodb+srv://pyaasiangel:Ronak%40123@cluster0.zejad4g.mongodb.net/?retryWrites=true&w=majority"
+DATABASE_URL = "mongodb+srv://ronaksaini922:NbeuC9FX8baih72p@cluster0.z6bb3.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 
 # OPTIONAL CONFIG
 DEFAULT_LANG = "en"
@@ -35,7 +35,7 @@ MEGA_EMAIL = "terminator@dzone.qzz.io"
 MEGA_PASSWORD = "downloaderzone"
 
 # Disable Options
-DISABLE_TORRENTS = False
+DISABLE_TORRENTS = True
 DISABLE_LEECH = False
 DISABLE_BULK = False
 DISABLE_MULTI = False

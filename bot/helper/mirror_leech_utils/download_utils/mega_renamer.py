@@ -33,6 +33,12 @@ from .... import LOGGER
 from ...telegram_helper.message_utils import send_message
 from ....helper.ext_utils.db_handler import database
 
+import asyncio, os, re, gc, time as t
+from config import OWNER_ID
+from .... import LOGGER
+from ....helper.telegram_helper.message_utils import send_message
+from ....helper.ext_utils.db_handler import database
+
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
@@ -87,40 +93,41 @@ async def rename_mega_command(_, message):
             raise Exception(err.decode())
 
         paths = [p.strip() for p in out.decode().splitlines() if p.strip()]
+        total_paths = len(paths)
+        await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
-        # ─── RENAME FILES ───
-        i = 1
-        for path in paths:
-            if renamed >= limit:
-                break
+        # ─── CONCURRENT RENAME FUNCTION ───
+        semaphore = asyncio.Semaphore(20)  # max 20 concurrent renames
 
-            name = os.path.basename(path)
-            is_folder = "." not in name
+        async def rename_path(i, path):
+            nonlocal renamed, failed
+            async with semaphore:
+                name = os.path.basename(path)
+                is_folder = "." not in name
+                if is_folder and not rename_folders:
+                    return
 
-            if is_folder and not rename_folders:
-                continue
+                new_name = f"{prefix}_{i}{os.path.splitext(name)[1]}"
+                if swap_mode and "@" in name:
+                    new_name = re.sub(r"@\w+", prefix, name)
 
-            renamed += 1
-            base, ext = os.path.splitext(name)
+                new_path = os.path.join(os.path.dirname(path), new_name)
+                proc = await asyncio.create_subprocess_shell(
+                    f'mega-mv "{path}" "{new_path}" 2>/dev/null',
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                _, err = await proc.communicate()
+                if err:
+                    failed += 1
+                    LOGGER.warning(f"Mega rename failed: {path} → {new_name} | {err.decode()}")
+                else:
+                    renamed += 1
 
-            if swap_mode:
-                new_name = re.sub(r"@\w+", prefix, name) if "@" in name else f"{prefix}_{renamed}{ext}"
-            else:
-                new_name = f"{prefix}_{renamed}{ext}"
+        # ─── LAUNCH ALL TASKS CONCURRENTLY ───
+        tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
+        await asyncio.gather(*tasks)
 
-            new_path = os.path.join(os.path.dirname(path), new_name)
-
-            proc = await asyncio.create_subprocess_shell(
-                f'mega-mv "{path}" "{new_path}" 2>/dev/null',
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            _, err = await proc.communicate()
-            if err:
-                failed += 1
-                LOGGER.warning(f"Mega rename failed: {path} → {new_name} | {err.decode()}")
-
-        # ─── LOGOUT ───
     finally:
         proc = await asyncio.create_subprocess_shell(
             "mega-logout 2>/dev/null || true",
@@ -145,9 +152,6 @@ async def rename_mega_command(_, message):
         f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ <b>Time:</b> <code>{elapsed}s</code>"
     )
-
-
-
 
 
 # ─────────────────────────────
