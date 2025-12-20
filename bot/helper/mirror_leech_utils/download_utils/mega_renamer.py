@@ -55,14 +55,17 @@ async def rename_mega_command(_, message):
     if not prefix:
         return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
-    limit = 10**9 if is_premium else 10**9
+    limit = 10**9  # effectively unlimited
     renamed = failed = 0
 
-    msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ..\nɪғ sᴛᴜᴄᴋ ғᴏʀ ᴍᴏʀᴇ ᴛʜᴀɴ 2ᴍɪɴ ᴘʟᴇᴀsᴇ ʀᴇɴᴀᴍᴇ ᴀɢᴀɪɴ...</b>")
+    msg = await send_message(
+        message,
+        "<b>🔐 Logging into Mega...\nIf stuck for >2 min, please retry...</b>"
+    )
     start = t.time()
 
     try:
-        # ─── LOGOUT FIRST (skip warnings) ───
+        # ─── LOGOUT FIRST ───
         proc = await asyncio.create_subprocess_shell(
             "mega-logout 2>/dev/null || true",
             stdout=asyncio.subprocess.PIPE,
@@ -96,8 +99,8 @@ async def rename_mega_command(_, message):
         total_paths = len(paths)
         await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
-        # ─── CONCURRENT RENAME FUNCTION ───
-        semaphore = asyncio.Semaphore(20)  # max 20 concurrent renames
+        # ─── CONCURRENT RENAME ───
+        semaphore = asyncio.Semaphore(100)  # limit concurrency
 
         async def rename_path(i, path):
             nonlocal renamed, failed
@@ -124,7 +127,6 @@ async def rename_mega_command(_, message):
                 else:
                     renamed += 1
 
-        # ─── LAUNCH ALL TASKS CONCURRENTLY ───
         tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
         await asyncio.gather(*tasks)
 
@@ -152,6 +154,7 @@ async def rename_mega_command(_, message):
         f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ <b>Time:</b> <code>{elapsed}s</code>"
     )
+
 
 
 # ─────────────────────────────
