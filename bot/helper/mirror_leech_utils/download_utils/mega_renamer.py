@@ -55,10 +55,10 @@ async def rename_mega_command(_, message):
     if not prefix:
         return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
-    limit = 10**9 if is_premium else 50
+    limit = 10**9 if is_premium else 10**9
     renamed = failed = 0
 
-    msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
+    msg = await send_message(message, "<b>🔐 ʟᴏɢɢɪɴɢ..\nɪғ sᴛᴜᴄᴋ ғᴏʀ ᴍᴏʀᴇ ᴛʜᴀɴ 2ᴍɪɴ ᴘʟᴇᴀsᴇ ʀᴇɴᴀᴍᴇ ᴀɢᴀɪɴ...</b>")
     start = t.time()
 
     try:
@@ -144,12 +144,12 @@ async def rename_mega_command(_, message):
 
     elapsed = round(t.time() - start, 2)
     await msg.edit_text(
-        f"<b>✅ Rename Completed</b>\n"
-        f"🔢 <b>Renamed:</b> <code>{renamed}</code>\n"
-        f"⚠️ <b>Failed:</b> <code>{failed}</code>\n"
-        f"🔤 <b>Prefix:</b> <code>{prefix}</code>\n"
-        f"📂 <b>Folder rename:</b> {'ON' if rename_folders else 'OFF'}\n"
-        f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
+        f"<b>✅ ʀᴇɴᴀᴍᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ</b>\n"
+        f"🔢 <b>ʀᴇɴᴀᴍᴇᴅ:</b> <code>{renamed}</code>\n"
+        f"⚠️ <b>ꜰᴀɪʟᴇᴅ:</b> <code>{failed}</code>\n"
+        f"🔤 <b>ᴘʀᴇꜰɪx:</b> <code>{prefix}</code>\n"
+        f"📂 <b>ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'ON' if rename_folders else 'OFF'}\n"
+        f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ <b>Time:</b> <code>{elapsed}s</code>"
     )
 
