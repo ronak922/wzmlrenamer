@@ -18,7 +18,7 @@ from aiofiles.os import (
 from magic import Magic
 
 from ... import DOWNLOAD_DIR, LOGGER
-from ...core.torrent_manager import TorrentManager
+# from ...core.torrent_manager import TorrentManager
 from .bot_utils import cmd_exec, sync_to_async
 from .exceptions import NotSupportedExtractionArchive
 
