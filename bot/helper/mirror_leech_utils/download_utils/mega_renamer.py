@@ -105,7 +105,33 @@ async def rename_mega_command(_, message):
         await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
         # ─── CONCURRENT RENAME ───
-        semaphore = asyncio.Semaphore(100)  # limit concurrency
+        semaphore = asyncio.Semaphore(50)  # limit concurrency
+
+        async def rename_with_retry(path, new_path, retries=3, delay=3):
+            for attempt in range(retries):
+                try:
+                    # Try renaming the file
+                    proc = await asyncio.create_subprocess_shell(
+                        f'mega-mv "{path}" "{new_path}" 2>/dev/null',
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE
+                    )
+                    out, err = await proc.communicate()
+                    if proc.returncode == 0:
+                        return True  # Success
+                    else:
+                        # Log the failure and retry
+                        LOGGER.warning(f"Attempt {attempt + 1} failed for {path} → {new_path}: {err.decode() if err else 'Unknown error'}")
+                        if attempt < retries - 1:
+                            await asyncio.sleep(delay)
+                        else:
+                            return False
+                except Exception as e:
+                    LOGGER.error(f"Error while renaming {path}: {e}")
+                    if attempt < retries - 1:
+                        await asyncio.sleep(delay)
+                    else:
+                        return False
 
         async def rename_path(i, path):
             nonlocal renamed, failed
@@ -134,20 +160,13 @@ async def rename_mega_command(_, message):
                     new_name = f"{prefix}_{i}_duplicate{os.path.splitext(name)[1]}"
                     new_path = os.path.join(os.path.dirname(path), new_name)
 
-                # Now proceed with renaming
-                proc = await asyncio.create_subprocess_shell(
-                    f'mega-mv "{path}" "{new_path}" 2>/dev/null',
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                out, err = await proc.communicate()
-
-                if proc.returncode != 0:
-                    failed += 1
-                    LOGGER.warning(f"Mega rename failed: {path} → {new_name} | Error: {err.decode() if err else 'No error message'}")
-                else:
+                # Now proceed with renaming, use retry logic
+                if await rename_with_retry(path, new_path):
                     renamed += 1
-                    LOGGER.info(f"Renamed: {path} → {new_name}")
+                    LOGGER.info(f"Successfully renamed: {path} → {new_name}")
+                else:
+                    failed += 1
+                    LOGGER.warning(f"Failed to rename: {path} → {new_name}")
 
         tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
         await asyncio.gather(*tasks)
