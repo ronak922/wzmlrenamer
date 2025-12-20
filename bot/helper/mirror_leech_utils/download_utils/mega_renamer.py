@@ -80,6 +80,10 @@ async def prefix_command(_, message: Message):
 # ─────────────────────────────
 # /rename — HANDLE BASED (FAST & FIXED)
 # ─────────────────────────────
+import asyncio, re, os, gc, time as t
+from utils import send_message, run_mega_cmd, LOGGER, database
+from pyrogram.types import Message
+
 async def rename_mega_command(_, message: Message):
     args = message.text.split(maxsplit=2)
     if len(args) < 3:
@@ -128,8 +132,7 @@ async def rename_mega_command(_, message: Message):
     entries = []
     for line in out.splitlines():
         line = line.strip()
-
-        # skip banners / junk
+        # Skip banners, warnings, or storage errors
         if not line or "exceeded your available storage" in line.lower():
             continue
 
@@ -138,23 +141,22 @@ async def rename_mega_command(_, message: Message):
             continue
 
         handle, name = parts
-
-        # valid Mega handles always end with "h"
-        if not handle.endswith("h"):
+        # Validate Mega handle format
+        if not handle.startswith("H:") and not handle.endswith("h"):
             continue
 
+        # Remove extra chars
         name = name.lstrip("* ").strip()
         entries.append((handle, name))
 
     if not entries:
         await run_mega_cmd(["mega-logout"])
-        return await msg.edit_text("❌ No files found")
+        return await msg.edit_text("❌ No files found to rename")
 
     await msg.edit_text(f"<b>✏️ Renaming {len(entries)} items...</b>")
 
-    # ─── FAST BATCH RENAME ───
+    # ─── BATCH RENAME ───
     BATCH_SIZE = 20
-
     for handle, name in entries:
         if renamed >= limit:
             break
@@ -190,7 +192,7 @@ async def rename_mega_command(_, message: Message):
             failed += 1
             LOGGER.error(f"Rename error: {e}")
 
-        # micro-yield for speed & stability
+        # Yield for stability
         if (renamed + failed) % BATCH_SIZE == 0:
             await asyncio.sleep(0)
 
