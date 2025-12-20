@@ -1,19 +1,16 @@
-# Async / core
 asyncio
 aiofiles
 aiohttp
 aioshutil
 anytree
 apscheduler
-
-# Downloaders / torrent
 aioaria2
 aioqbt
-qbittorrent-api
-yt-dlp[default,curl-cffi]
-
-# API / Web
+pyromod==1.5
+cinemagoer
 cloudscraper
+pyrogram==2.0.80
+dnspython
 fastapi
 feedparser
 google-api-python-client
@@ -21,36 +18,28 @@ google-auth-httplib2
 google-auth-oauthlib
 gunicorn
 httpx
+langcodes
 jinja2
 lxml
+motor
+natsort
+mega.py
+par2cmdline-turbo
+pillow
+psutil
+pycountry
+pymongo
+pyrofork
+python-magic
+pytz
+qbittorrent-api
 requests
+speedtest-cli
+telegraph
+tenacity
+tgcrypto
 urllib3
 uvicorn
 uvloop==0.21.0
-
-# Database / Utils
-dnspython
-motor
-natsort
-psutil
-pymongo
-python-magic
-pytz
 xattr
-
-# Media / Images
-pillow
-pyrofork==2.2.11
-telegraph
-
-# Languages
-langcodes>=3.3.0
-language_data
-
-# Other
-speedtest-cli
-tenacity
-tgcrypto
-git+https://github.com/cinemagoer/cinemagoer
-par2cmdline-turbo
-pycountry
+yt-dlp[default,curl-cffi]
