@@ -28,20 +28,15 @@ async def prefix_command(_, message):
     await database.set_user_prefix(message.from_user.id, args[1].strip())
     await send_message(message, f"<b>✅ Prefix set to:</b> <code>{args[1]}</code>")
 
-import time as t
-from mega import Mega
-from config import OWNER_ID
+import asyncio, os, re, gc, time as t
+from .... import LOGGER
+from ...telegram_helper.message_utils import send_message
+from ....helper.ext_utils.db_handler import database
 
-# ─────────────────────────────
-# /rename — MegaCMD Rename (updated)
-# ─────────────────────────────
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
-        return await send_message(
-            message,
-            "<b>⚙️ Usage:</b>\n/rename <email> <password>"
-        )
+        return await send_message(message, "<b>⚙️ Usage:</b>\n/rename <email> <password>")
 
     email, password = args[1], args[2]
     user_id = message.from_user.id
@@ -61,59 +56,96 @@ async def rename_mega_command(_, message):
     start = t.time()
 
     try:
-        mega = Mega()
-        m = mega.login(email, password)  # non-interactive login
-    except Exception as e:
-        return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{e}</code>")
+        # ─── LOGOUT FIRST (skip warnings) ───
+        proc = await asyncio.create_subprocess_shell(
+            "mega-logout 2>/dev/null || true",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await proc.communicate()
 
-    await msg.edit_text("<b>📂 Fetching files...</b>")
+        # ─── LOGIN ───
+        proc = await asyncio.create_subprocess_shell(
+            f"mega-login {email} {password} 2>/dev/null",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out, err = await proc.communicate()
+        if proc.returncode != 0:
+            return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{err.decode()}</code>")
 
-    try:
-        files = m.get_files()  # fetch all files/folders
-    except Exception as e:
-        m.logout()
-        return await msg.edit_text(f"❌ <b>Failed to fetch files:</b>\n<code>{e}</code>")
+        await msg.edit_text("<b>📂 Fetching files...</b>")
 
-    for file_id, f in files.items():
-        if renamed >= limit:
-            break
+        # ─── GET FILES RECURSIVELY ───
+        proc = await asyncio.create_subprocess_shell(
+            "mega-find /",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        out, err = await proc.communicate()
+        if proc.returncode != 0:
+            raise Exception(err.decode())
 
-        name = f['a']['n']
-        is_folder = f['t'] == 1
+        paths = [p.strip() for p in out.decode().splitlines() if p.strip()]
 
-        if is_folder and not rename_folders:
-            continue
+        # ─── RENAME FILES ───
+        i = 1
+        for path in paths:
+            if renamed >= limit:
+                break
 
-        renamed += 1
-        base, ext = os.path.splitext(name)
-        if swap_mode:
-            new_name = re.sub(r"@\w+", prefix, name) if "@" in name else f"{prefix}_{renamed}{ext}"
-        else:
-            new_name = f"{prefix}_{renamed}{ext}"
+            name = os.path.basename(path)
+            is_folder = "." not in name
 
-        try:
-            m.rename(file_id, new_name)
-        except Exception as e:
-            failed += 1
-            LOGGER.error(f"Mega rename failed: {name} → {new_name} | {e}")
+            if is_folder and not rename_folders:
+                continue
 
-    m.logout()  # always logout
-    gc.collect()
+            renamed += 1
+            base, ext = os.path.splitext(name)
+
+            if swap_mode:
+                new_name = re.sub(r"@\w+", prefix, name) if "@" in name else f"{prefix}_{renamed}{ext}"
+            else:
+                new_name = f"{prefix}_{renamed}{ext}"
+
+            new_path = os.path.join(os.path.dirname(path), new_name)
+
+            proc = await asyncio.create_subprocess_shell(
+                f'mega-mv "{path}" "{new_path}" 2>/dev/null',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, err = await proc.communicate()
+            if err:
+                failed += 1
+                LOGGER.warning(f"Mega rename failed: {path} → {new_name} | {err.decode()}")
+
+        # ─── LOGOUT ───
+    finally:
+        proc = await asyncio.create_subprocess_shell(
+            "mega-logout 2>/dev/null || true",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        await proc.communicate()
+        gc.collect()
 
     try:
         await database.increment_user_rename_count(user_id, renamed)
     except Exception as e:
         LOGGER.warning(f"Rename count update failed: {e}")
 
+    elapsed = round(t.time() - start, 2)
     await msg.edit_text(
-        f"<b>✅ Rename Completed</b>\n\n"
+        f"<b>✅ Rename Completed</b>\n"
         f"🔢 <b>Renamed:</b> <code>{renamed}</code>\n"
         f"⚠️ <b>Failed:</b> <code>{failed}</code>\n"
         f"🔤 <b>Prefix:</b> <code>{prefix}</code>\n"
         f"📂 <b>Folder rename:</b> {'ON' if rename_folders else 'OFF'}\n"
         f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
-        f"⏱ <b>Time:</b> <code>{round(t.time() - start, 2)}s</code>"
+        f"⏱ <b>Time:</b> <code>{elapsed}s</code>"
     )
+
 
 
 
