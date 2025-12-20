@@ -38,14 +38,12 @@ async def main():
     )
     await gather(load_configurations(), update_variables())
 
-    from .core.torrent_manager import TorrentManager
+    # from .core.torrent_manager import TorrentManager
+    TorrentManager = None
 
     await TorrentManager.initiate()
-    await gather(
-        update_qb_options(),
-        update_aria2_options(),
-        update_nzb_options(),
-    )
+    await update_nzb_options()  # Only NZB, skip all torrent updates
+
     from .core.jdownloader_booter import jdownloader
     from .helper.ext_utils.files_utils import clean_all
     from .helper.ext_utils.telegraph_helper import telegraph

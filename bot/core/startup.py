@@ -28,11 +28,14 @@ from .. import (
 from ..helper.ext_utils.db_handler import database
 from .config_manager import Config, BinConfig
 from .tg_client import TgClient
-from .torrent_manager import TorrentManager
+# from .torrent_manager import TorrentManager
+
+TorrentManager = None
+
 
 # ───── Disable torrents permanently ─────
 TORRENTS_ENABLED = False  # Set to False to permanently skip all torrent code
-
+DISABLE_TORRENTS = True  # Config option to disable torrents
 
 async def update_qb_options():
     if not TORRENTS_ENABLED:
