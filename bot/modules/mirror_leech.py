@@ -34,7 +34,7 @@ from ..helper.mirror_leech_utils.download_utils.direct_link_generator import (
 )
 from ..helper.mirror_leech_utils.download_utils.gd_download import add_gd_download
 from ..helper.mirror_leech_utils.download_utils.jd_download import add_jd_download
-from ..helper.mirror_leech_utils.download_utils.mega_download import add_mega_download
+# from ..helper.mirror_leech_utils.download_utils.mega_download import add_mega_download
 from ..helper.mirror_leech_utils.download_utils.nzb_downloader import add_nzb
 from ..helper.mirror_leech_utils.download_utils.qbit_download import add_qb_torrent
 from ..helper.mirror_leech_utils.download_utils.rclone_download import (
@@ -424,8 +424,8 @@ class Mirror(TaskListener):
             await add_rclone_download(self, f"{path}/")
         elif is_gdrive_link(self.link) or is_gdrive_id(self.link):
             await add_gd_download(self, path)
-        elif is_mega_link(self.link):
-            await add_mega_download(self, f"{path}/")
+        # elif is_mega_link(self.link):
+        #     await add_mega_download(self, f"{path}/")
         else:
             ussr = args["-au"]
             pssw = args["-ap"]
