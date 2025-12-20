@@ -1,4 +1,4 @@
-from mega import MegaApi
+from mega import Mega
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from pyrogram.handlers import CallbackQueryHandler
@@ -66,7 +66,7 @@ async def rename_mega_command(client, message):
 
         # ─── INIT ───
         async_api = AsyncMega()
-        async_api.api = api = MegaApi(None, None, None, "MEGA_RENAMER_BOT")
+        async_api.api = api = Mega(None, None, None, "MEGA_RENAMER_BOT")
         mega_listener = MegaAppListener(async_api.continue_event, None)
         api.addListener(mega_listener)
 
