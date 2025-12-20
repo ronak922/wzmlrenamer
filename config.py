@@ -1,6 +1,6 @@
 # REQUIRED CONFIG
-BOT_TOKEN = "8031591204:AAH3eFJ1pc7pyW_6HfoAfjZA-ewUNZsscRA"
-OWNER_ID = 7819896156
+BOT_TOKEN = "8530131445:AAHr1RCQ_fyripg0ExyyfAvFjyN9bzyM4AQ"
+OWNER_ID = 8349410880
 TELEGRAM_API = 20763817
 TELEGRAM_HASH = "07186e8f2ffe607e99eedf7eaa5e630b"
 DATABASE_URL = "mongodb+srv://pyaasiangel:Ronak%40123@cluster0.zejad4g.mongodb.net/?retryWrites=true&w=majority"
