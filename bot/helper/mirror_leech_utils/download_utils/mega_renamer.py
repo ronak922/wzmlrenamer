@@ -1,13 +1,23 @@
-import os, re, asyncio, gc, time as t, shutil
+import os
+import re
+import asyncio
+import gc
+import time as t
+import shutil
+
+from pyrogram import filters
 from pyrogram.types import Message
+from pyrogram.handlers import CallbackQueryHandler
+
 from .... import LOGGER
 from ....helper.ext_utils.db_handler import database
 from ...telegram_helper.message_utils import send_message
+from ....helper.telegram_helper.button_build import ButtonMaker
 from ....core.tg_client import TgClient
 
 
 # ─────────────────────────────
-# MegaCMD safe runner
+# MegaCMD SAFE RUNNER
 # ─────────────────────────────
 async def run_mega_cmd(cmd, timeout=60):
     if not shutil.which("mega-login"):
@@ -30,17 +40,17 @@ async def run_mega_cmd(cmd, timeout=60):
         out = stdout.decode(errors="ignore")
         err = stderr.decode(errors="ignore")
 
-        # Ignore quota banners completely
-        quota_lines = (
+        # 🔥 strip quota banners
+        BAD = (
             "You have exceeded your available storage",
             "You have exeeded your available storage",
-            "upgrade your account plan"
+            "upgrade"
         )
 
         def clean(txt):
             return "\n".join(
                 l for l in txt.splitlines()
-                if not any(q in l for q in quota_lines)
+                if not any(b in l for b in BAD)
             ).strip()
 
         return clean(out), clean(err), proc.returncode
@@ -50,7 +60,25 @@ async def run_mega_cmd(cmd, timeout=60):
 
 
 # ─────────────────────────────
-# /rename — SAFE MegaCMD flow
+# /prefix
+# ─────────────────────────────
+async def prefix_command(_, message: Message):
+    args = message.text.split(maxsplit=1)
+    if len(args) < 2:
+        return await send_message(
+            message,
+            "<b>⚙️ Usage:</b>\n<code>/prefix your_prefix</code>"
+        )
+
+    prefix = args[1].strip()
+    await database.set_user_prefix(message.from_user.id, prefix)
+    await send_message(
+        message,
+        f"<b>✅ Prefix set:</b> <code>{prefix}</code>"
+    )
+
+# ─────────────────────────────
+# /rename — HANDLE BASED (FAST & FIXED)
 # ─────────────────────────────
 async def rename_mega_command(_, message: Message):
     args = message.text.split(maxsplit=2)
@@ -72,12 +100,13 @@ async def rename_mega_command(_, message: Message):
         return await send_message(message, "❌ <b>Set prefix first using /prefix</b>")
 
     limit = 10**9 if is_premium else 50
-    renamed = failed = 0
+    renamed = 0
+    failed = 0
     start_time = t.time()
 
     msg = await send_message(message, "<b>🔐 Resetting Mega session...</b>")
 
-    # ─── LOGOUT ANY OLD SESSION ───
+    # ─── LOGOUT ───
     await run_mega_cmd(["mega-logout"], timeout=10)
 
     # ─── LOGIN ───
@@ -85,51 +114,54 @@ async def rename_mega_command(_, message: Message):
         ["mega-login", email, password],
         timeout=40
     )
-
     if code != 0:
-        return await msg.edit_text(
-            f"❌ <b>Mega login failed</b>\n<code>{err or out}</code>"
-        )
+        return await msg.edit_text(f"❌ <b>Mega login failed</b>\n<code>{err or out}</code>")
 
     await msg.edit_text("<b>📂 Fetching file list...</b>")
 
-    # ─── LIST FILES ───
-    out, err, _ = await run_mega_cmd(["mega-ls", "-R"], timeout=120)
+    # ─── LIST FILES (HANDLE MODE) ───
+    out, err, _ = await run_mega_cmd(
+        ["mega-ls", "-R", "--show-handles"],
+        timeout=180
+    )
 
-    raw_paths = []
+    entries = []
     for line in out.splitlines():
         line = line.strip()
-        if not line or line.startswith("|") or line.startswith("-"):
+
+        # skip banners / junk
+        if not line or "exceeded your available storage" in line.lower():
             continue
-        raw_paths.append(line)
 
-    if not raw_paths:
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+
+        handle, name = parts
+
+        # valid Mega handles always end with "h"
+        if not handle.endswith("h"):
+            continue
+
+        name = name.lstrip("* ").strip()
+        entries.append((handle, name))
+
+    if not entries:
         await run_mega_cmd(["mega-logout"])
-        return await msg.edit_text("❌ No files found in Mega account")
+        return await msg.edit_text("❌ No files found")
 
-    # ─── SPLIT FILES & FOLDERS ───
-    files = []
-    folders = []
+    await msg.edit_text(f"<b>✏️ Renaming {len(entries)} items...</b>")
 
-    for p in raw_paths:
-        name = os.path.basename(p)
-        if "." in name:
-            files.append(p)
-        else:
-            folders.append(p)
+    # ─── FAST BATCH RENAME ───
+    BATCH_SIZE = 20
 
-    # 🔥 CRITICAL: rename deepest folders LAST
-    folders.sort(key=lambda x: x.count("/"), reverse=True)
-
-    await msg.edit_text("<b>✏️ Renaming files...</b>")
-
-    # ─── FILE RENAME FIRST ───
-    for path in files:
+    for handle, name in entries:
         if renamed >= limit:
             break
 
-        name = os.path.basename(path)
-        parent = os.path.dirname(path)
+        is_folder = "." not in name
+        if is_folder and not rename_folders:
+            continue
 
         if name.startswith(prefix):
             continue
@@ -138,55 +170,31 @@ async def rename_mega_command(_, message: Message):
             if swap_mode:
                 new_name = re.sub(r"@[\w\d_]+", prefix, name, count=1)
                 if new_name == name:
-                    continue
+                    new_name = f"{prefix}_{renamed+1}"
             else:
                 base, ext = os.path.splitext(name)
                 new_name = f"{prefix}_{renamed+1}{ext}"
 
-            new_path = f"{parent}/{new_name}" if parent else new_name
-
             _, err, code = await run_mega_cmd(
-                ["mega-mv", path, new_path],
-                timeout=30
+                ["mega-mv", handle, new_name],
+                timeout=15
             )
 
             if code == 0:
                 renamed += 1
             else:
                 failed += 1
-                LOGGER.error(f"File rename failed: {path} | {err}")
+                LOGGER.error(f"Rename failed: {name} → {new_name} | {err}")
 
         except Exception as e:
             failed += 1
-            LOGGER.error(f"File rename error: {e}")
+            LOGGER.error(f"Rename error: {e}")
 
-    # ─── FOLDER RENAME LAST ───
-    if rename_folders:
-        for path in folders:
-            if renamed >= limit:
-                break
+        # micro-yield for speed & stability
+        if (renamed + failed) % BATCH_SIZE == 0:
+            await asyncio.sleep(0)
 
-            name = os.path.basename(path)
-            parent = os.path.dirname(path)
-
-            if name.startswith(prefix):
-                continue
-
-            new_name = f"{prefix}_{renamed+1}"
-            new_path = f"{parent}/{new_name}" if parent else new_name
-
-            _, err, code = await run_mega_cmd(
-                ["mega-mv", path, new_path],
-                timeout=40
-            )
-
-            if code == 0:
-                renamed += 1
-            else:
-                failed += 1
-                LOGGER.error(f"Folder rename failed: {path} | {err}")
-
-    # ─── CLEAN LOGOUT ───
+    # ─── LOGOUT ───
     await run_mega_cmd(["mega-logout"], timeout=10)
     gc.collect()
 
@@ -204,6 +212,8 @@ async def rename_mega_command(_, message: Message):
         f"🔁 Swap mode: {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ Time: <code>{round(t.time() - start_time, 2)}s</code>"
     )
+
+
 
 from pyrogram import filters
 from pyrogram.types import InlineKeyboardMarkup, Message
