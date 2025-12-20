@@ -1,42 +1,5 @@
-from asyncio import TimeoutError, gather
-from contextlib import suppress
-from inspect import iscoroutinefunction
-from pathlib import Path
-
-from aioaria2 import Aria2WebsocketClient
-from aiohttp import ClientError
-from aioqbt.client import create_client
-from tenacity import (
-    retry,
-    retry_if_exception_type,
-    stop_after_attempt,
-    wait_exponential,
-)
-
-from .. import LOGGER, aria2_options
-from .config_manager import Config
-
-
-def wrap_with_retry(obj, max_retries=3):
-    for attr_name in dir(obj):
-        if attr_name.startswith("_"):
-            continue
-
-        attr = getattr(obj, attr_name)
-        if iscoroutinefunction(attr):
-            retry_policy = retry(
-                stop=stop_after_attempt(max_retries),
-                wait=wait_exponential(multiplier=1, min=1, max=5),
-                retry=retry_if_exception_type(
-                    (ClientError, TimeoutError, RuntimeError)
-                ),
-            )
-            wrapped = retry_policy(attr)
-            setattr(obj, attr_name, wrapped)
-    return obj
-
-
 # bot/core/torrent_manager.py
+from pathlib import Path
 
 class TorrentManager:
     @classmethod
