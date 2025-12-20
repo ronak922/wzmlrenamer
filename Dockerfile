@@ -1,14 +1,21 @@
-FROM mysterysd/wzmlx:v3
+# Use Python 3.13 slim base
+FROM python:3.13-slim
 
+# Set working directory
 WORKDIR /usr/src/app
-RUN chmod 777 /usr/src/app
 
-RUN uv venv --system-site-packages
-
+# Copy requirements first for Docker cache
 COPY requirements.txt .
-RUN uv pip install --no-cache-dir -r requirements.txt
 
+# Upgrade pip and install dependencies
+RUN python3 -m pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy all bot code
 COPY . .
 
-CMD ["bash", "start.sh"]
+# Make start script executable
+RUN chmod +x start.sh
 
+# Start the bot
+CMD ["bash", "start.sh"]
