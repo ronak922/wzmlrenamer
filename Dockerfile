@@ -1,16 +1,14 @@
-FROM python:3.13-slim
+FROM mysterysd/wzmlx:v3
 
 WORKDIR /usr/src/app
 RUN chmod 777 /usr/src/app
 
-# Create virtual environment (optional)
-RUN python -m venv venv
-ENV PATH="/usr/src/app/venv/bin:$PATH"
+RUN uv venv --system-site-packages
 
 COPY requirements.txt .
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
 CMD ["bash", "start.sh"]
+
