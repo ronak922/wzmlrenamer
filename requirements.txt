@@ -34,7 +34,7 @@ qbittorrent-api
 requests
 speedtest-cli
 telegraph
-tenacity<6.0.0
+tenacity>=8.2.2,<9
 tgcrypto
 urllib3<2
 uvicorn
