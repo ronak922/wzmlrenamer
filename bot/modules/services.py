@@ -51,7 +51,7 @@ async def start(_, message):
         photo="https://i.ibb.co/G4RHktPc/image.jpg",
         caption=START_MSG,
         reply_markup=reply_markup,
-        message_effect_id=5104841245755180586
+        # message_effect_id=5104841245755180586
 
     )
     await delete_message(message)
