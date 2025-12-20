@@ -57,11 +57,20 @@ async def rename_mega_command(_, message):
     msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
     start = t.time()
 
-    # ─── LOGIN ───
     login_out = False
+
     try:
+        # ─── LOGOUT FIRST TO AVOID "ALREADY LOGGED IN" ───
+        await cmd_exec(["mega-logout"])
+
+        # ─── LOGIN ───
         out, err, code = await cmd_exec(["mega-login", email, password])
-        if code != 0:
+        # ignore quota warning in Mega CLI output
+        if "exceeded your available storage" in err:
+            await msg.edit_text(
+                "<b>⚠️ Warning: Account over quota. Will attempt rename anyway...</b>"
+            )
+        elif code != 0:
             return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{err}</code>")
 
         login_out = True
@@ -104,7 +113,7 @@ async def rename_mega_command(_, message):
 
     finally:
         if login_out:
-            await cmd_exec(["mega-logout"])  # ensure logout happens even on failure
+            await cmd_exec(["mega-logout"])  # always logout
         gc.collect()
 
     try:
@@ -121,6 +130,7 @@ async def rename_mega_command(_, message):
         f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ <b>Time:</b> <code>{round(t.time() - start, 2)}s</code>"
     )
+
 
 
 # ─────────────────────────────
