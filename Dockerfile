@@ -2,7 +2,7 @@ FROM python:3.13-slim
 
 WORKDIR /usr/src/app
 
-# Install system packages needed to build some Python C extensions
+# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
@@ -14,20 +14,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     git \
+    qbittorrent-nox \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
 COPY requirements.txt .
 
-# Upgrade pip and install dependencies
 RUN python3 -m pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy bot code
 COPY . .
-
-# Make start.sh executable
 RUN chmod +x start.sh
 
-# Start the bot
 CMD ["bash", "start.sh"]
