@@ -103,7 +103,7 @@ async def rename_mega_command(_, message: Message):
         pass
 
     # ─── LOGIN ───
-    out, err, code = await run_mega_cmd(["mega-login", "--force", email, password], timeout=30)
+    out, err, code = await run_mega_cmd(["mega-login", email, password], timeout=30)
     if code != 0:
         return await msg.edit_text(f"❌ Mega login failed:\n<code>{err}</code>")
 
