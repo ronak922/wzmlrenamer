@@ -28,9 +28,12 @@ async def prefix_command(_, message):
     await database.set_user_prefix(message.from_user.id, args[1].strip())
     await send_message(message, f"<b>✅ Prefix set to:</b> <code>{args[1]}</code>")
 
+import time as t
+from mega import Mega
+from config import OWNER_ID
 
 # ─────────────────────────────
-# /rename — MegaCMD Rename
+# /rename — MegaCMD Rename (updated)
 # ─────────────────────────────
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
@@ -57,64 +60,45 @@ async def rename_mega_command(_, message):
     msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
     start = t.time()
 
-    login_out = False
+    try:
+        mega = Mega()
+        m = mega.login(email, password)  # non-interactive login
+    except Exception as e:
+        return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{e}</code>")
+
+    await msg.edit_text("<b>📂 Fetching files...</b>")
 
     try:
-        # ─── LOGOUT FIRST TO AVOID "ALREADY LOGGED IN" ───
-        await cmd_exec(["mega-logout"])
+        files = m.get_files()  # fetch all files/folders
+    except Exception as e:
+        m.logout()
+        return await msg.edit_text(f"❌ <b>Failed to fetch files:</b>\n<code>{e}</code>")
 
-        # ─── LOGIN ───
-        out, err, code = await cmd_exec(["mega-login", email, password])
-        # ignore quota warning in Mega CLI output
-        if "exceeded your available storage" in err:
-            await msg.edit_text(
-                "<b>⚠️ Warning: Account over quota. Will attempt rename anyway...</b>"
-            )
-        elif code != 0:
-            return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{err}</code>")
+    for file_id, f in files.items():
+        if renamed >= limit:
+            break
 
-        login_out = True
-        await msg.edit_text("<b>📂 Fetching files...</b>")
+        name = f['a']['n']
+        is_folder = f['t'] == 1
 
-        # ─── RECURSIVE LIST ───
-        out, err, code = await cmd_exec(["mega-ls", "-R"])
-        if code != 0:
-            return await msg.edit_text(f"❌ <b>Mega error:</b>\n<code>{err}</code>")
+        if is_folder and not rename_folders:
+            continue
 
-        paths = [p.strip() for p in out.splitlines() if p.strip()]
+        renamed += 1
+        base, ext = os.path.splitext(name)
+        if swap_mode:
+            new_name = re.sub(r"@\w+", prefix, name) if "@" in name else f"{prefix}_{renamed}{ext}"
+        else:
+            new_name = f"{prefix}_{renamed}{ext}"
 
-        for path in paths:
-            if renamed >= limit:
-                break
+        try:
+            m.rename(file_id, new_name)
+        except Exception as e:
+            failed += 1
+            LOGGER.error(f"Mega rename failed: {name} → {new_name} | {e}")
 
-            name = os.path.basename(path)
-            is_folder = "." not in name
-
-            if is_folder and not rename_folders:
-                continue
-
-            renamed += 1
-
-            if swap_mode:
-                try:
-                    new_name = re.sub(r"@\w+", prefix, name)
-                except Exception:
-                    new_name = f"{prefix}_{renamed}"
-            else:
-                base, ext = os.path.splitext(name)
-                new_name = f"{prefix}_{renamed}{ext}"
-
-            new_path = os.path.join(os.path.dirname(path), new_name)
-
-            _, err, code = await cmd_exec(["mega-mv", path, new_path])
-            if code != 0:
-                failed += 1
-                LOGGER.error(f"Mega rename failed: {path} → {new_name} | {err}")
-
-    finally:
-        if login_out:
-            await cmd_exec(["mega-logout"])  # always logout
-        gc.collect()
+    m.logout()  # always logout
+    gc.collect()
 
     try:
         await database.increment_user_rename_count(user_id, renamed)
@@ -130,6 +114,7 @@ async def rename_mega_command(_, message):
         f"🔁 <b>Swap mode:</b> {'ON' if swap_mode else 'OFF'}\n"
         f"⏱ <b>Time:</b> <code>{round(t.time() - start, 2)}s</code>"
     )
+
 
 
 
