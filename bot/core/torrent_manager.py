@@ -36,112 +36,36 @@ def wrap_with_retry(obj, max_retries=3):
     return obj
 
 
-class TorrentManager:
-    aria2 = None
-    qbittorrent = None
+# bot/core/torrent_manager.py
 
+class TorrentManager:
     @classmethod
     async def initiate(cls):
-        if cls.aria2:
-            return
-        try:
-            cls.aria2 = await Aria2WebsocketClient.new("http://localhost:6800/jsonrpc")
-            LOGGER.info("Aria2 initialized successfully.")
-
-            if Config.DISABLE_TORRENTS:
-                LOGGER.info("Torrents are disabled.")
-                return
-
-            cls.qbittorrent = await create_client("http://localhost:8090/api/v2/")
-            cls.qbittorrent = wrap_with_retry(cls.qbittorrent)
-
-        except Exception as e:
-            LOGGER.error(f"Error during initialization: {e}")
-            await cls.close_all()
-            raise
+        return
 
     @classmethod
     async def close_all(cls):
-        close_tasks = []
-        if cls.aria2:
-            close_tasks.append(cls.aria2.close())
-            cls.aria2 = None
-        if cls.qbittorrent:
-            close_tasks.append(cls.qbittorrent.close())
-            cls.qbittorrent = None
-        if close_tasks:
-            await gather(*close_tasks)
-
-    @classmethod
-    async def aria2_remove(cls, download):
-        if download.get("status", "") in ["active", "paused", "waiting"]:
-            await cls.aria2.forceRemove(download.get("gid", ""))
-        else:
-            with suppress(Exception):
-                await cls.aria2.removeDownloadResult(download.get("gid", ""))
+        return
 
     @classmethod
     async def remove_all(cls):
-        await cls.pause_all()
-        if cls.qbittorrent:
-            await gather(
-                cls.qbittorrent.torrents.delete("all", False),
-                cls.aria2.purgeDownloadResult(),
-            )
-        else:
-            await gather(
-                cls.aria2.purgeDownloadResult(),
-            )
-        downloads = []
-        results = await gather(cls.aria2.tellActive(), cls.aria2.tellWaiting(0, 1000))
-        for res in results:
-            downloads.extend(res)
-        tasks = []
-        tasks.extend(
-            cls.aria2.forceRemove(download.get("gid")) for download in downloads
-        )
-        with suppress(Exception):
-            await gather(*tasks)
-
-    @classmethod
-    async def overall_speed(cls):
-        aria2_speed = await cls.aria2.getGlobalStat()
-        download_speed = int(aria2_speed.get("downloadSpeed", "0"))
-        upload_speed = int(aria2_speed.get("uploadSpeed", "0"))
-
-        if cls.qbittorrent:
-            qb_speed = await cls.qbittorrent.transfer.info()
-            download_speed += qb_speed.dl_info_speed
-            upload_speed += qb_speed.up_info_speed
-
-        return download_speed, upload_speed
+        return
 
     @classmethod
     async def pause_all(cls):
-        pause_tasks = [cls.aria2.forcePauseAll()]
-        if cls.qbittorrent:
-            pause_tasks.append(cls.qbittorrent.torrents.stop("all"))
-        await gather(*pause_tasks)
+        return
+
+    @classmethod
+    async def overall_speed(cls):
+        return 0, 0
+
+    @classmethod
+    async def aria2_remove(cls, download):
+        return
 
     @classmethod
     async def change_aria2_option(cls, key, value):
-        downloads = []
-        results = await gather(cls.aria2.tellActive(), cls.aria2.tellWaiting(0, 1000))
-        for res in results:
-            downloads.extend(res)
-        tasks = [
-            cls.aria2.changeOption(download.get("gid"), {key: value})
-            for download in downloads
-            if download.get("status", "") != "complete"
-        ]
-        if tasks:
-            try:
-                await gather(*tasks)
-            except Exception as e:
-                LOGGER.error(e)
-        if key not in ["checksum", "index-out", "out", "pause", "select-file"]:
-            await cls.aria2.changeGlobalOption({key: value})
-            aria2_options[key] = value
+        return
 
 
 def aria2_name(download_info):
