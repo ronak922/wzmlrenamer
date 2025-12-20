@@ -23,7 +23,7 @@ jinja2
 lxml
 motor
 natsort
-# mega.py
+mega.py
 par2cmdline-turbo
 pillow
 psutil
