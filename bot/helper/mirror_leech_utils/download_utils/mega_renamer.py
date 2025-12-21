@@ -44,6 +44,13 @@ import os
 import re
 import time as t
 
+import os
+import asyncio
+import shlex
+import time as t
+import gc
+
+
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
@@ -60,7 +67,7 @@ async def rename_mega_command(_, message):
     if not prefix:
         return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
-    limit = 10**9  # effectively unlimited
+    limit = 10**9  # effectively unlimited for premium users
     renamed = failed = 0
 
     msg = await send_message(
@@ -104,44 +111,42 @@ async def rename_mega_command(_, message):
         total_paths = len(paths)
         await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
+        # ─── DEDUPLICATE PATHS ───
+        paths = list(dict.fromkeys(paths))  # removes duplicates and preserves order
+
         # ─── CONCURRENT RENAME ───
         semaphore = asyncio.Semaphore(100)  # limit concurrency
+        used_names = set()  # track renamed files
 
         async def rename_path(i, path):
             nonlocal renamed, failed
             async with semaphore:
                 name = os.path.basename(path)
+                is_folder = path.endswith('/')  # simple check for folder
 
-                # Determine if path is folder or file
-                # Remove dot-based detection; only skip folder renames if rename_folders=False
-                is_folder = path.endswith('/')  # simple heuristic
+                # Skip folder rename if rename_folders is off
                 if is_folder and not rename_folders:
                     return
 
-                # Determine file extension for files
                 file_ext = "" if is_folder else os.path.splitext(name)[1]
-                new_name = f"{prefix}_{i}{file_ext}"
+                base_new_name = f"{prefix}_{i}{file_ext}"
+                new_name = base_new_name
 
-                if swap_mode and "@" in name:
-                    new_name = re.sub(r"@\w+", prefix, name)
+                # Avoid duplicate names in memory
+                count = 1
+                while new_name in used_names:
+                    new_name = f"{prefix}_{i}_duplicate{count}{file_ext}"
+                    count += 1
+                used_names.add(new_name)
 
                 new_path = os.path.join(os.path.dirname(path), new_name)
 
-                # Check if new name exists in folder
-                check_proc = await asyncio.create_subprocess_shell(
-                    f"mega-find \"{os.path.dirname(path)}\" | grep -qxF \"{new_name}\"",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                check_out, check_err = await check_proc.communicate()
+                # Sanitize paths to handle special characters safely
+                new_path = shlex.quote(new_path)  # escaping special characters in paths
+                path = shlex.quote(path)  # escaping source path
 
-                if check_proc.returncode == 0:
-                    new_name = f"{prefix}_{i}_duplicate{file_ext}"
-                    new_path = os.path.join(os.path.dirname(path), new_name)
-
-                # Rename using mega-mv
                 proc = await asyncio.create_subprocess_shell(
-                    f'mega-mv "{path}" "{new_path}" 2>/dev/null',
+                    f'mega-mv {path} {new_path} 2>/dev/null',
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE
                 )
@@ -153,6 +158,9 @@ async def rename_mega_command(_, message):
                 else:
                     renamed += 1
                     LOGGER.info(f"Renamed: {path} → {new_name}")
+
+                # Optional: add a small delay to avoid rate-limiting
+                await asyncio.sleep(0.5)  # adjust or remove if unnecessary
 
         tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
         await asyncio.gather(*tasks, return_exceptions=True)
