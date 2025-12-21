@@ -44,6 +44,8 @@ import os
 import re
 import time as t
 
+import shlex  # To safely quote paths and escape special characters
+
 async def rename_mega_command(_, message):
     args = message.text.split(maxsplit=3)
     if len(args) < 3:
@@ -105,30 +107,28 @@ async def rename_mega_command(_, message):
         counter = 1
 
         async def update_progress(current):
-            # Simple text-based progress bar
-            bar_length = 10
+            bar_length = 20
             filled_length = int(bar_length * current / total_items)
             bar = "█" * filled_length + "░" * (bar_length - filled_length)
-            await msg.edit_text(
-                f"<b>Renaming in progress...</b>\n"
-                f"<code>[{bar}]</code> {current}/{total_items}\n"
-                f"Renamed: {renamed} | Failed: {failed}"
-            )
+            return f"[{bar}] {current}/{total_items} Renamed: {renamed} | Failed: {failed}"
 
         # ─── RENAME FILES ───
+        progress_updated = 0
         for i, path in enumerate(files[:limit], 1):
             name = os.path.basename(path)
             if prefix in name:
-                await update_progress(counter)
-                counter += 1
                 continue
 
             ext = os.path.splitext(name)[1]
             new_name = f"{prefix}_{counter}{ext}" if ext else f"{prefix}_{counter}"
             new_path = os.path.join(os.path.dirname(path), new_name)
 
+            # Escape paths and names to handle special characters
+            path_escaped = shlex.quote(path)
+            new_path_escaped = shlex.quote(new_path)
+
             proc = await asyncio.create_subprocess_shell(
-                f'mega-mv "{path}" "{new_path}"',
+                f'mega-mv {path_escaped} {new_path_escaped}',  # Ensure paths are safely quoted
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -139,22 +139,28 @@ async def rename_mega_command(_, message):
                 failed += 1
                 LOGGER.warning(f"Failed to rename {path} → {new_name}: {err.decode() if err else 'Unknown'}")
 
-            await update_progress(counter)
             counter += 1
+
+            # Update progress every 10 files/folders
+            if counter % 10 == 0 or i == len(files) - 1:
+                progress_text = await update_progress(counter)
+                await msg.edit_text(f"<b>Renaming in progress...</b>\n{progress_text}")
 
         # ─── RENAME FOLDERS ───
         for path in folders[:limit]:
             name = os.path.basename(path)
             if prefix in name or not rename_folders:
-                await update_progress(counter)
-                counter += 1
                 continue
 
             new_name = f"{prefix}_{counter}"
             new_path = os.path.join(os.path.dirname(path), new_name)
 
+            # Escape paths and names to handle special characters
+            path_escaped = shlex.quote(path)
+            new_path_escaped = shlex.quote(new_path)
+
             proc = await asyncio.create_subprocess_shell(
-                f'mega-mv "{path}" "{new_path}"',
+                f'mega-mv {path_escaped} {new_path_escaped}',  # Ensure paths are safely quoted
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
@@ -165,8 +171,12 @@ async def rename_mega_command(_, message):
                 failed += 1
                 LOGGER.warning(f"Failed to rename folder {path} → {new_name}: {err.decode() if err else 'Unknown'}")
 
-            await update_progress(counter)
             counter += 1
+
+            # Update progress every 10 files/folders
+            if counter % 10 == 0 or i == len(folders) - 1:
+                progress_text = await update_progress(counter)
+                await msg.edit_text(f"<b>Renaming in progress...</b>\n{progress_text}")
 
     finally:
         proc = await asyncio.create_subprocess_shell(
