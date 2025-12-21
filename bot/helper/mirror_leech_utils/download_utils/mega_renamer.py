@@ -54,23 +54,19 @@ async def rename_mega_command(_, message):
 
     prefix = await database.get_user_prefix(user_id)
     rename_folders = await database.get_user_folder_state(user_id)
-    swap_mode = await database.get_user_swap_state(user_id)
     is_premium = await database.is_user_premium(user_id)
 
     if not prefix:
         return await send_message(message, "❌ <b>No prefix set. Use /prefix first.</b>")
 
-    limit = 10**9  # effectively unlimited
+    limit = 10**9
     renamed = failed = 0
 
-    msg = await send_message(
-        message,
-        "<b>🔐 Logging into Mega...\nIf stuck for >2 min, please retry...</b>"
-    )
+    msg = await send_message(message, "<b>🔐 Logging into Mega...</b>")
     start = t.time()
 
     try:
-        # ─── LOGOUT FIRST ───
+        # ─── LOGOUT AND LOGIN ───
         proc = await asyncio.create_subprocess_shell(
             "mega-logout 2>/dev/null || true",
             stdout=asyncio.subprocess.PIPE,
@@ -78,7 +74,6 @@ async def rename_mega_command(_, message):
         )
         await proc.communicate()
 
-        # ─── LOGIN ───
         proc = await asyncio.create_subprocess_shell(
             f"mega-login {email} {password} 2>/dev/null",
             stdout=asyncio.subprocess.PIPE,
@@ -88,9 +83,8 @@ async def rename_mega_command(_, message):
         if proc.returncode != 0:
             return await msg.edit_text(f"❌ <b>Login failed:</b>\n<code>{err.decode()}</code>")
 
-        await msg.edit_text("<b>📂 Fetching files...</b>")
+        await msg.edit_text("<b>📂 Fetching files and folders...</b>")
 
-        # ─── GET FILES RECURSIVELY ───
         proc = await asyncio.create_subprocess_shell(
             "mega-find /",
             stdout=asyncio.subprocess.PIPE,
@@ -101,75 +95,78 @@ async def rename_mega_command(_, message):
             raise Exception(err.decode())
 
         paths = [p.strip() for p in out.decode().splitlines() if p.strip()]
-        total_paths = len(paths)
-        await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
 
-        # ─── CONCURRENT RENAME ───
-        semaphore = asyncio.Semaphore(50)  # limit concurrency
+        # ─── SEPARATE FILES AND FOLDERS ───
+        files = [p for p in paths if "." in os.path.basename(p)]
+        folders = [p for p in paths if "." not in os.path.basename(p)]
+        folders.sort(key=lambda p: p.count("/"), reverse=True)  # deepest first
 
-        async def rename_with_retry(path, new_path, retries=3, delay=3):
-            for attempt in range(retries):
-                try:
-                    # Try renaming the file
-                    proc = await asyncio.create_subprocess_shell(
-                        f'mega-mv "{path}" "{new_path}" 2>/dev/null',
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE
-                    )
-                    out, err = await proc.communicate()
-                    if proc.returncode == 0:
-                        return True  # Success
-                    else:
-                        # Log the failure and retry
-                        LOGGER.warning(f"Attempt {attempt + 1} failed for {path} → {new_path}: {err.decode() if err else 'Unknown error'}")
-                        if attempt < retries - 1:
-                            await asyncio.sleep(delay)
-                        else:
-                            return False
-                except Exception as e:
-                    LOGGER.error(f"Error while renaming {path}: {e}")
-                    if attempt < retries - 1:
-                        await asyncio.sleep(delay)
-                    else:
-                        return False
+        total_items = len(files) + len(folders)
+        counter = 1
 
-        async def rename_path(i, path):
-            nonlocal renamed, failed
-            async with semaphore:
-                name = os.path.basename(path)
-                is_folder = "." not in name
-                if is_folder and not rename_folders:
-                    return
+        async def update_progress(current):
+            # Simple text-based progress bar
+            bar_length = 10
+            filled_length = int(bar_length * current / total_items)
+            bar = "█" * filled_length + "░" * (bar_length - filled_length)
+            await msg.edit_text(
+                f"<b>Renaming in progress...</b>\n"
+                f"<code>[{bar}]</code> {current}/{total_items}\n"
+                f"Renamed: {renamed} | Failed: {failed}"
+            )
 
-                new_name = f"{prefix}_{i}{os.path.splitext(name)[1]}"
-                if swap_mode and "@" in name:
-                    new_name = re.sub(r"@\w+", prefix, name)
+        # ─── RENAME FILES ───
+        for i, path in enumerate(files[:limit], 1):
+            name = os.path.basename(path)
+            if prefix in name:
+                await update_progress(counter)
+                counter += 1
+                continue
 
-                new_path = os.path.join(os.path.dirname(path), new_name)
+            ext = os.path.splitext(name)[1]
+            new_name = f"{prefix}_{counter}{ext}" if ext else f"{prefix}_{counter}"
+            new_path = os.path.join(os.path.dirname(path), new_name)
 
-                # Check if the file already exists with the new name
-                check_proc = await asyncio.create_subprocess_shell(
-                    f"mega-find \"{os.path.dirname(path)}\" | grep -qxF \"{new_name}\"",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
-                )
-                check_out, check_err = await check_proc.communicate()
+            proc = await asyncio.create_subprocess_shell(
+                f'mega-mv "{path}" "{new_path}"',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, err = await proc.communicate()
+            if proc.returncode == 0:
+                renamed += 1
+            else:
+                failed += 1
+                LOGGER.warning(f"Failed to rename {path} → {new_name}: {err.decode() if err else 'Unknown'}")
 
-                if check_proc.returncode == 0:
-                    # File with the new name exists, skip renaming or append suffix
-                    new_name = f"{prefix}_{i}_duplicate{os.path.splitext(name)[1]}"
-                    new_path = os.path.join(os.path.dirname(path), new_name)
+            await update_progress(counter)
+            counter += 1
 
-                # Now proceed with renaming, use retry logic
-                if await rename_with_retry(path, new_path):
-                    renamed += 1
-                    LOGGER.info(f"Successfully renamed: {path} → {new_name}")
-                else:
-                    failed += 1
-                    LOGGER.warning(f"Failed to rename: {path} → {new_name}")
+        # ─── RENAME FOLDERS ───
+        for path in folders[:limit]:
+            name = os.path.basename(path)
+            if prefix in name or not rename_folders:
+                await update_progress(counter)
+                counter += 1
+                continue
 
-        tasks = [rename_path(i + 1, path) for i, path in enumerate(paths[:limit])]
-        await asyncio.gather(*tasks)
+            new_name = f"{prefix}_{counter}"
+            new_path = os.path.join(os.path.dirname(path), new_name)
+
+            proc = await asyncio.create_subprocess_shell(
+                f'mega-mv "{path}" "{new_path}"',
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            _, err = await proc.communicate()
+            if proc.returncode == 0:
+                renamed += 1
+            else:
+                failed += 1
+                LOGGER.warning(f"Failed to rename folder {path} → {new_name}: {err.decode() if err else 'Unknown'}")
+
+            await update_progress(counter)
+            counter += 1
 
     finally:
         proc = await asyncio.create_subprocess_shell(
@@ -187,13 +184,12 @@ async def rename_mega_command(_, message):
 
     elapsed = round(t.time() - start, 2)
     await msg.edit_text(
-        f"<b>✅ ʀᴇɴᴀᴍᴇ ᴄᴏᴍᴘʟᴇᴛᴇᴅ</b>\n"
-        f"🔢 <b>ʀᴇɴᴀᴍᴇᴅ:</b> <code>{renamed}</code>\n"
-        f"⚠️ <b>ꜰᴀɪʟᴇᴅ:</b> <code>{failed}</code>\n"
-        f"🔤 <b>ᴘʀᴇꜰɪx:</b> <code>{prefix}</code>\n"
-        f"📂 <b>ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'ᴏɴ' if rename_folders else 'ᴏғғ'}\n"
-        f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ᴏɴ' if swap_mode else 'ᴏғғ'}\n"
-        f"⏱ <b>ᴛɪᴍᴇ:</b> <code>{elapsed}s</code>"
+        f"<b>✅ Rename Completed</b>\n"
+        f"🔢 Renamed: <code>{renamed}</code>\n"
+        f"⚠️ Failed: <code>{failed}</code>\n"
+        f"🔤 Prefix: <code>{prefix}</code>\n"
+        f"📂 Folder rename: {'On' if rename_folders else 'Off'}\n"
+        f"⏱ Time: <code>{elapsed}s</code>"
     )
 
 
