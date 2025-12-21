@@ -60,7 +60,6 @@ async def rename_mega_command(_, message):
     user_id = message.from_user.id
 
     prefix = await database.get_user_prefix(user_id)
-    rename_folders = await database.get_user_folder_state(user_id)
     swap_mode = await database.get_user_swap_state(user_id)
     is_premium = await database.is_user_premium(user_id)
 
@@ -109,7 +108,7 @@ async def rename_mega_command(_, message):
 
         paths = [p.strip() for p in out.decode().splitlines() if p.strip()]
         total_paths = len(paths)
-        await msg.edit_text(f"<b>📂 Found {total_paths} files/folders. Renaming...</b>")
+        await msg.edit_text(f"<b>📂 Found {total_paths} files. Renaming...</b>")
 
         # ─── DEDUPLICATE PATHS ───
         paths = list(dict.fromkeys(paths))  # removes duplicates and preserves order
@@ -122,13 +121,12 @@ async def rename_mega_command(_, message):
             nonlocal renamed, failed
             async with semaphore:
                 name = os.path.basename(path)
-                is_folder = path.endswith('/')  # simple check for folder
+                file_ext = os.path.splitext(name)[1]  # get file extension
 
-                # Skip folder rename if rename_folders is off
-                if is_folder and not rename_folders:
+                # Skip if it's not a file with an extension
+                if not file_ext:
                     return
 
-                file_ext = "" if is_folder else os.path.splitext(name)[1]
                 base_new_name = f"{prefix}_{i}{file_ext}"
                 new_name = base_new_name
 
@@ -185,10 +183,10 @@ async def rename_mega_command(_, message):
         f"🔢 <b>ʀᴇɴᴀᴍᴇᴅ:</b> <code>{renamed}</code>\n"
         f"⚠️ <b>ꜰᴀɪʟᴇᴅ:</b> <code>{failed}</code>\n"
         f"🔤 <b>ᴘʀᴇꜰɪx:</b> <code>{prefix}</code>\n"
-        f"📂 <b>ꜰᴏʟᴅᴇʀ ʀᴇɴᴀᴍᴇ:</b> {'ᴏɴ' if rename_folders else 'ᴏғғ'}\n"
         f"🔁 <b>sᴡᴀᴘ ᴍᴏᴅᴇ:</b> {'ᴏɴ' if swap_mode else 'ᴏғғ'}\n"
         f"⏱ <b>ᴛɪᴍᴇ:</b> <code>{elapsed}s</code>"
     )
+
 
 # ─────────────────────────────
 # /settings
